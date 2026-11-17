@@ -548,7 +548,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v32-firebase';
+const BUILD='v33-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -607,6 +607,7 @@ function isTV(){return !!(net.online&&net.meta&&net.meta.tv&&net.meta.tv===MYID)
 const HOSTED=/firebase/.test(BUILD);   // only the self-hosted build has a public join link worth putting in a QR code
 function joinURL(){return location.origin+location.pathname+'#g-'+(net.code||'');}
 let wakeLock=null;
+window.__cinePeek=()=>B3._peek&&B3._peek();
 async function keepAwake(on){try{if(on&&!wakeLock&&navigator.wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null;});}
   if(!on&&wakeLock){await wakeLock.release();wakeLock=null;}}catch{}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&isTV())keepAwake(true);});
@@ -1945,9 +1946,9 @@ function preyAt(st,pos,o){o=o||{};const sq=o.sq||0,spin=o.spin||0,tilt=o.tilt||0
     p.alpha=al;p.hurt=Math.max(p.hurt||0,o.hurt||0);p.s=[1-sq*.4,1-sq*.4,1-sq*.4];}}
 const SCRIPTS_TILE={
   whirlpool:[(st,t,tm)=>{const u=smooth(.18,.95,t);
-    st.people.forEach((p,i)=>{const th=i*2.4+tm*(.35+.9*u)+u*u*2.2,R=Math.hypot(p.home[0],p.home[2])*(1-u)+.05;p.p=[Math.cos(th)*R,-.3-2.4*u*u,Math.sin(th)*R];p.q=Q.yaw(-th*1.1);p.hurt=Math.min(1,u*2);p.alpha=1-smooth(.7,.95,t);});
-    if(st.boat){const th=1+tm*(.3+1*u)+u*u*2.4,R=1.7*(1-u)+.05;st.boat.p=[Math.cos(th)*R,.13-2.6*u*u,Math.sin(th)*R];st.boat.q=Q.mul(Q.yaw(-th*1.2),Q.axis([1,0,0],.6*u));st.boat.alpha=1-smooth(.75,.97,t);}
-    for(const c of st.crs){const th=3+tm*(.25+.8*u)+u*u*2,R=2.1*(1-u)+.1;c.p=[Math.cos(th)*R,-.05-2.6*u*u,Math.sin(th)*R];c.q=Q.yaw(-th-Math.PI/2);c.alpha=1-smooth(.75,.97,t);}
+    st.people.forEach((p,i)=>{const th=i*2.4+tm*.35+u*u*1.4,R=Math.hypot(p.home[0],p.home[2])*(1-u)+.05;p.p=[Math.cos(th)*R,-.3-2.4*u*u,Math.sin(th)*R];p.q=Q.yaw(-th*.4);p.hurt=Math.min(1,u*2);p.alpha=1-smooth(.7,.95,t);});
+    if(st.boat){const th=1+tm*.3+u*u*1.5,R=1.7*(1-u)+.05;st.boat.p=[Math.cos(th)*R,.13-2.6*u*u,Math.sin(th)*R];st.boat.q=Q.mul(Q.yaw(-th*.5),Q.axis([1,0,0],.6*u));st.boat.alpha=1-smooth(.75,.97,t);}
+    for(const c of st.crs){const th=3+tm*.25+u*u*1.3,R=2.1*(1-u)+.1;c.p=[Math.cos(th)*R,-.05-2.6*u*u,Math.sin(th)*R];c.q=Q.yaw(-th-Math.PI/2);c.alpha=1-smooth(.75,.97,t);}
     if(t>.15)fire(st,'swirl',()=>sSplash([0,0,0],false,20));if(t>.6)fire(st,'gone',()=>sSplash([0,0,0],false,26));}],
   volcano:[(st,t,tm)=>{const run=smooth(.2,.5,t),fall=smooth(.5,.75,t);
     st.people.forEach((p,i)=>{const h=p.home,ang=Math.atan2(h[2],h[0]),R=Math.hypot(h[0],h[2])+.7;const r=R+run*.9;
@@ -2065,11 +2066,11 @@ const SCRIPTS={
 const FXSCENE={
   whirlpool:(st,t,tm,dr)=>{const form=smooth(0,.25,t),fade=1-smooth(.85,1,t);
     gl.disable(gl.DEPTH_TEST);
-    for(let i=0;i<11;i++){const r=(2.9-i*.25),y=.03-i*.07*form,spin=tm*(.3+i*.12)+i*.7;const dark=i/11;
+    for(let i=0;i<11;i++){const r=(2.9-i*.25),y=.03-i*.07*form,spin=tm*(.2+i*.06)+i*.7;const dark=i/11;
       dr(MESH.cring,M4.trs([0,y,0],Q.yaw(spin),[r,1,r*.92]),i%2?[.78,.92,1]:[.08-.07*dark,.3-.25*dark,.48-.38*dark],(i%2?.55:.95)*form*fade,i%2?.5:0);}
     dr(MESH.disc,M4.trs([0,.03-.8*form,0],Q.id(),[.32,1,.3]),[.01,.04,.07],form*fade,0);
     gl.enable(gl.DEPTH_TEST);
-    for(let i=0;i<22;i++){const a=i*.9+tm*(.5+.2*(i%3)),r=.3+((i*.37+tm*.08)%1)*2.3;dr(MESH.drop,M4.trs([Math.cos(a)*r,-.02-.08*(2.6-r),Math.sin(a)*r],Q.axis([Math.sin(a),0,-Math.cos(a)],1.3),[.8,.8,.8]),[.9,.97,1],.8*form*fade,.6);}},
+    for(let i=0;i<22;i++){const a=i*.9+tm*(.3+.1*(i%3)),r=.3+((i*.37+tm*.06)%1)*2.3;dr(MESH.drop,M4.trs([Math.cos(a)*r,-.02-.08*(2.6-r),Math.sin(a)*r],Q.axis([Math.sin(a),0,-Math.cos(a)],1.3),[.8,.8,.8]),[.9,.97,1],.8*form*fade,.6);}},
   volcano:(st,t,tm,dr)=>{const erupt=smooth(.1,.2,t);
     dr(MESH.peak,M4.trs([0,-.35,0],Q.id(),[3.4,3.3,3.4]),[.7,.55,.45],1,.12*erupt);
     dr(MESH.disc,M4.trs([0,1.66,0],Q.id(),[.55,1,.55]),[1,.55,.12],1,.9*erupt);
@@ -2091,7 +2092,8 @@ function drawCine(tn,time){
   if(!cine){if(el&&el.style.display!=='none'&&!el.classList.contains('out'))el.style.display='none';return;}
   const t=(tn-cine.t0)/CINE_DUR;
   if(t>=1){cine=null;stageSplash=[];if(el){el.classList.add('out');setTimeout(()=>{if(!cine)el.style.display='none';},260);}return;}
-  (SCRIPTS_TILE[cine.a.kind]||SCRIPTS[cine.a.kind])[cine.a.variant](cine,t,time);
+  const lt=(tn-cine.t0)/1000;
+  (SCRIPTS_TILE[cine.a.kind]||SCRIPTS[cine.a.kind])[cine.a.variant](cine,t,lt);
   const[x0,y0,cw,ch]=cineRect();
   if(el){el.style.left=(x0/DPR)+'px';el.style.top=((H-y0-ch)/DPR)+'px';el.style.width=(cw/DPR)+'px';el.style.height=(ch/DPR)+'px';}
   gl.enable(gl.SCISSOR_TEST);gl.scissor(x0,y0,cw,ch);gl.viewport(x0,y0,cw,ch);gl.clearColor(.05,.2,.3,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -2106,7 +2108,7 @@ function drawCine(tn,time){
   const dr=(m,M,tint,alpha,emis)=>{if(alpha<=.01)return;gl.uniformMatrix4fv(pr.u.uM,false,M);gl.uniform4fv(pr.u.uTint,[tint[0],tint[1],tint[2],alpha]);gl.uniform1f(pr.u.uEmis,emis||0);
     useAttr(pr,'aP',m.bp,3);useAttr(pr,'aN',m.bn,3);useAttr(pr,'aC',m.bc,3);if(alpha<1)gl.depthMask(false);gl.drawArrays(gl.TRIANGLES,0,m.n);gl.depthMask(true);};
   const wv=p=>[p[0],p[1]+waveH(p[0],p[2],time),p[2]];
-  if(FXSCENE[cine.a.kind])FXSCENE[cine.a.kind](cine,t,time,dr);
+  if(FXSCENE[cine.a.kind])FXSCENE[cine.a.kind](cine,t,(tn-cine.t0)/1000,dr);
   for(const c of cine.crs){let m=MESH[c.kind];const M=M4.trs(c.p,c.q,c.s);
     if(c.kind==='serpent'){const sg=serpentGeo(Object.assign({ph:time*2.2+(c.th||0)},c.pose||{}));updateMesh(c.mesh||(c.mesh=upload(sg)),sg);m=c.mesh;
       const h=sg.head;c.hw=[M[0]*h[0]+M[4]*h[1]+M[8]*h[2]+M[12],M[1]*h[0]+M[5]*h[1]+M[9]*h[2]+M[13],M[2]*h[0]+M[6]*h[1]+M[10]*h[2]+M[14]];}
@@ -2368,6 +2370,7 @@ return{attach,sync,resetView,get ok(){return ok;},get tried(){return tried;},sup
   _cam:o=>{Object.assign(cam,o,{user:true});},
   _cine:a=>queueCine(a,0),
   _cineT:()=>cine?(now()-cine.t0)/CINE_DUR:null,
+  _peek:()=>cine&&cine.people[0]?cine.people[0].p.slice():null,
   _cineCount:()=>window.__cineN||0,hexW:k=>WP(k),
   _debug:()=>({dieScreen:dieWait&&VP?project([dieWait.p[0],dieWait.p[1],dieWait.p[2]]):null,objs:objs.size,anims:anims.length,cam,die:!!die,dieWait:!!dieWait,W,H})};
 })();
