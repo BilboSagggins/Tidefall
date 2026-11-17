@@ -89,6 +89,30 @@ svg .pc{pointer-events:none}
 .cine3d .cs{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(4,20,30,.82);border-radius:10px;padding:6px 10px;font-size:13px;text-align:center;line-height:1.35}
 .cap3d{position:absolute;left:50%;top:10px;transform:translateX(-50%);max-width:92%;background:rgba(6,32,46,.88);border:1px solid var(--accent);border-radius:12px;padding:8px 14px;font-size:14px;text-align:center;pointer-events:none;display:none;line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.4)}
 .cap3d span{color:var(--muted);font-size:13px}
+.tvlobby{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:center;min-height:calc(100vh - 40px);padding:10px 20px}
+.tvjoin{text-align:center}
+.tvjoin h1{font-size:64px;text-align:center!important}
+.tvsub{font-size:22px;color:var(--muted);margin:6px 0}
+.tvqr{width:min(34vh,300px);height:auto;border-radius:16px;border:6px solid #fff;margin:8px auto;display:block;image-rendering:pixelated}
+.tvurl{font-size:24px;font-weight:700;color:var(--ink);word-break:break-all;margin:0}
+.tvcode{font-size:64px!important;letter-spacing:12px!important}
+.tvcrew .pl{font-size:22px;padding:12px 14px}
+.tvcrew .sw{width:22px;height:22px}
+.tvcrew h2{font-size:28px}
+.tvcrew button{font-size:22px;min-height:56px;padding:12px 22px}
+button:focus-visible{outline:4px solid #fff;outline-offset:3px}
+body.tv{padding:8px 12px}
+body.tv #app{max-width:none}
+body.tv .game{grid-template-columns:minmax(0,1fr) 360px;gap:14px}
+body.tv .boardwrap.b3{height:calc(100vh - 80px)}
+body.tv .legend,body.tv #info,body.tv #guideBtn,body.tv .hand,body.tv details{display:none!important}
+body.tv .tvstatus{font-size:24px;padding:16px}
+body.tv .tvstatus span{color:var(--muted);font-size:20px}
+body.tv .players .pl{font-size:18px;padding:10px 12px}
+body.tv .log{max-height:30vh;font-size:15px}
+body.tv .cine3d .ct{font-size:22px}
+body.tv .cine3d .cs{font-size:18px}
+body.tv .cap3d{font-size:20px}
 .selbar{font-size:14px;background:#0b2a3b;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
 .mob{display:none!important}
 .sidehead{display:none}
@@ -524,7 +548,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v31-firebase';
+const BUILD='v32-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -576,7 +600,17 @@ function valueVisible(e){if(!S)return false;if(S.phase==='ended')return true;if(
   const h=humans();if(!h.length)return true;if(h.length===1)return e.o===h[0];return ui.peek&&e.o===S.turn;}
 
 function pushHist(prev,ns){const snap=clone(prev);delete snap.hist;ns.hist=(prev.hist||[]).concat([snap]).slice(-12);}
-function canUndo(){if(!S||!S.hist||!S.hist.length)return false;if(net.online)return !!(net.meta&&net.meta.host===MYID);return humans().length>0;}
+// Online, the host is whoever created the room. When a TV created it, the first player to join shares the host controls.
+function firstSeat(){return S&&S.players[0]?S.players[0].id:(net.seats[0]&&net.seats[0].uid);}
+function amHost(){const m=net.meta;return !!(m&&(m.host===MYID||(m.tv&&firstSeat()===MYID)));}
+function isTV(){return !!(net.online&&net.meta&&net.meta.tv&&net.meta.tv===MYID);}
+const HOSTED=/firebase/.test(BUILD);   // only the self-hosted build has a public join link worth putting in a QR code
+function joinURL(){return location.origin+location.pathname+'#g-'+(net.code||'');}
+let wakeLock=null;
+async function keepAwake(on){try{if(on&&!wakeLock&&navigator.wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null;});}
+  if(!on&&wakeLock){await wakeLock.release();wakeLock=null;}}catch{}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&isTV())keepAwake(true);});
+function canUndo(){if(!S||!S.hist||!S.hist.length)return false;if(net.online)return amHost();return humans().length>0;}
 function undo(){
   if(!canUndo())return;
   const h=S.hist.slice();let st=null;
@@ -760,6 +794,85 @@ function fxAttack2D(a){return(el,fast)=>{
   const d=el.querySelector('.die');setTimeout(()=>{d.className='die done';},700*fast);
   return 2600*fast;};}
 
+/* ---------- QR code generator (byte mode, error correction level M, versions 1-10) ---------- */
+const QR=(()=>{
+  // per version: [data codewords per block for group 1, blocks in group 1, data per block group 2, blocks in group 2, EC codewords per block]
+  const SPEC=[null,[16,1,0,0,10],[28,1,0,0,16],[44,1,0,0,26],[32,2,0,0,18],[43,2,0,0,24],[27,4,0,0,16],[31,4,0,0,18],[38,2,39,2,22],[36,3,37,2,22],[43,4,44,1,26]];
+  const ALIGN=[null,[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50]];
+  // GF(256) with polynomial 0x11D
+  const EXP=new Array(512),LOG=new Array(256);
+  {let x=1;for(let i=0;i<255;i++){EXP[i]=x;LOG[x]=i;x<<=1;if(x&256)x^=0x11D;}for(let i=255;i<512;i++)EXP[i]=EXP[i-255];}
+  const mul=(a,b)=>a&&b?EXP[LOG[a]+LOG[b]]:0;
+  function rsGen(deg){let g=[1];for(let i=0;i<deg;i++){const n=new Array(g.length+1).fill(0);for(let j=0;j<g.length;j++){n[j]^=g[j];n[j+1]^=mul(g[j],EXP[i]);}g=n;}return g;}
+  function rsRem(data,deg){const g=rsGen(deg);const r=data.concat(new Array(deg).fill(0));
+    for(let i=0;i<data.length;i++){const c=r[i];if(!c)continue;for(let j=0;j<g.length;j++)r[i+j]^=mul(g[j],c);}return r.slice(data.length);}
+  function encode(text){
+    const bytes=Array.from(new TextEncoder().encode(text));
+    let ver=0,sp;
+    for(let v=1;v<=10;v++){sp=SPEC[v];const cap=sp[0]*sp[1]+sp[2]*sp[3];const need=4+(v<10?8:16)+8*bytes.length;if(need<=cap*8){ver=v;break;}}
+    if(!ver)throw new Error('Text too long for this QR generator');
+    const cap=sp[0]*sp[1]+sp[2]*sp[3];
+    // bit stream
+    const bits=[];const push=(v,n)=>{for(let i=n-1;i>=0;i--)bits.push((v>>i)&1);};
+    push(4,4);push(bytes.length,ver<10?8:16);bytes.forEach(b=>push(b,8));
+    push(0,Math.min(4,cap*8-bits.length));while(bits.length%8)bits.push(0);
+    const data=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|bits[i+j];data.push(b);}
+    for(let pad=0xEC;data.length<cap;pad^=0xEC^0x11)data.push(pad);
+    // split into blocks, add error correction, interleave
+    const blocks=[];let k=0;
+    for(let g=0;g<2;g++){const n=g?sp[2]:sp[0],cnt=g?sp[3]:sp[1];for(let b=0;b<cnt;b++){const d=data.slice(k,k+n);k+=n;blocks.push({d,e:rsRem(d,sp[4])});}}
+    const out=[];const maxD=Math.max(...blocks.map(b=>b.d.length));
+    for(let i=0;i<maxD;i++)for(const b of blocks)if(i<b.d.length)out.push(b.d[i]);
+    for(let i=0;i<sp[4];i++)for(const b of blocks)out.push(b.e[i]);
+    // matrix
+    const size=17+4*ver;const M=[],F=[];for(let y=0;y<size;y++){M.push(new Array(size).fill(0));F.push(new Array(size).fill(false));}
+    const setF=(x,y,v)=>{M[y][x]=v?1:0;F[y][x]=true;};
+    for(let i=0;i<size;i++){setF(6,i,i%2===0);setF(i,6,i%2===0);}
+    const finder=(cx,cy)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const x=cx+dx,y=cy+dy;if(x<0||y<0||x>=size||y>=size)continue;const d=Math.max(Math.abs(dx),Math.abs(dy));setF(x,y,d!==2&&d!==4);}};
+    finder(3,3);finder(size-4,3);finder(3,size-4);
+    const al=ALIGN[ver];
+    for(const ay of al)for(const ax of al){if((ax===6&&ay===6)||(ax===6&&ay===al[al.length-1])||(ax===al[al.length-1]&&ay===6))continue;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setF(ax+dx,ay+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);}
+    const formatBits=mask=>{const d=(0<<3)|mask;let r=d;for(let i=0;i<10;i++)r=(r<<1)^((r>>9)*0x537);return((d<<10)|r)^0x5412;};
+    const drawFormat=mask=>{const f=formatBits(mask);const b=i=>(f>>i)&1;
+      for(let i=0;i<=5;i++)setF(8,i,b(i));setF(8,7,b(6));setF(8,8,b(7));setF(7,8,b(8));for(let i=9;i<15;i++)setF(14-i,8,b(i));
+      for(let i=0;i<8;i++)setF(size-1-i,8,b(i));for(let i=8;i<15;i++)setF(8,size-15+i,b(i));setF(8,size-8,1);};
+    drawFormat(0);
+    if(ver>=7){let r=ver;for(let i=0;i<12;i++)r=(r<<1)^((r>>11)*0x1F25);const v=(ver<<12)|r;
+      for(let i=0;i<18;i++){const bit=(v>>i)&1,a=size-11+i%3,b=Math.floor(i/3);setF(a,b,bit);setF(b,a,bit);}}
+    // place data in the zig-zag order
+    const allBits=[];out.forEach(c=>{for(let i=7;i>=0;i--)allBits.push((c>>i)&1);});
+    let bi=0;
+    for(let right=size-1;right>=1;right-=2){if(right===6)right=5;
+      for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;
+        if(!F[y][x]&&bi<allBits.length){M[y][x]=allBits[bi];bi++;}}}
+    // choose the mask with the lowest penalty
+    const MASKS=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,
+      (x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+    const applyMask=m=>{for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!F[y][x]&&MASKS[m](x,y))M[y][x]^=1;};
+    const penalty=()=>{let p=0;
+      for(let pass=0;pass<2;pass++)for(let a=0;a<size;a++){let run=1;for(let b=1;b<size;b++){const c=pass?M[b][a]:M[a][b],prev=pass?M[b-1][a]:M[a][b-1];
+        if(c===prev){run++;if(run===5)p+=3;else if(run>5)p++;}else run=1;}}
+      for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const c=M[y][x];if(c===M[y][x+1]&&c===M[y+1][x]&&c===M[y+1][x+1])p+=3;}
+      const pat1=[1,0,1,1,1,0,1,0,0,0,0],pat2=[0,0,0,0,1,0,1,1,1,0,1];
+      for(let pass=0;pass<2;pass++)for(let a=0;a<size;a++)for(let b=0;b+11<=size;b++){let m1=true,m2=true;
+        for(let i=0;i<11;i++){const c=pass?M[b+i][a]:M[a][b+i];if(c!==pat1[i])m1=false;if(c!==pat2[i])m2=false;}if(m1)p+=40;if(m2)p+=40;}
+      let dark=0;for(let y=0;y<size;y++)for(let x=0;x<size;x++)dark+=M[y][x];p+=10*Math.floor(Math.abs(dark*100/(size*size)-50)/5);return p;};
+    let best=0,bestP=1e9;
+    for(let m=0;m<8;m++){applyMask(m);drawFormat(m);const p=penalty();if(p<bestP){bestP=p;best=m;}applyMask(m);}
+    applyMask(best);drawFormat(best);
+    return M;
+  }
+  // draw onto a canvas; returns a data: URL
+  function dataURL(text,px=8,dark='#000',light='#fff'){
+    const M=encode(text),n=M.length,q=4,c=document.createElement('canvas');c.width=c.height=(n+2*q)*px;const x=c.getContext('2d');
+    x.fillStyle=light;x.fillRect(0,0,c.width,c.height);x.fillStyle=dark;
+    for(let y=0;y<n;y++)for(let i=0;i<n;i++)if(M[y][i])x.fillRect((i+q)*px,(y+q)*px,px,px);
+    return c.toDataURL();
+  }
+  return{encode,dataURL};
+})();
+
 /* ---------- dice + tile animations ---------- */
 const FXQ=[];let fxBusyUntil=0,fxRunning=false;
 const ELEV_COL={beach:'#e6d29c',forest:'#3f7d4a',mountain:'#857565'};
@@ -819,13 +932,14 @@ function runAI(){
 }
 /* ---------- online ---------- */
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ';let c='';for(let i=0;i<5;i++)c+=A[Math.floor(Math.random()*A.length)];return c;}
-async function createOnline(nick){
+async function createOnline(nick,tv){
   ui.err='';
   try{
     const code=genCode();
     const ref=DB.doc('games/'+code);
-    await ref.set({code,host:MYID,status:'lobby',v:0,state:'',created:Date.now()});
-    await DB.doc(`games/${code}/seats/${MYID}`).set({uid:MYID,nick,at:Date.now(),color:ui.myColor});
+    const meta={code,host:MYID,status:'lobby',v:0,state:'',created:Date.now()};if(tv)meta.tv=MYID;
+    await ref.set(meta);
+    if(!tv)await DB.doc(`games/${code}/seats/${MYID}`).set({uid:MYID,nick,at:Date.now(),color:ui.myColor});
     enterOnline(code);
   }catch(e){ui.err=writeErr(e);render();}
 }
@@ -875,7 +989,7 @@ async function startOnline(){
   try{await net.ref.update({status:'playing',state:JSON.stringify(st),v:st.v});}catch(e){toast(writeErr(e));}
 }
 function hostSkip(){
-  if(!net.online||!net.meta||net.meta.host!==MYID||!S||S.phase==='ended')return;
+  if(!net.online||!amHost()||!S||S.phase==='ended')return;
   const ns=JSON.parse(JSON.stringify(S));
   log(ns,`The host skipped ${pname(ns,ns.turn)}'s turn.`);
   if(ns.phase==='setupE'){const e=ns.explorers.find(x=>x.o===ns.turn&&x.st==='res');const k=Object.keys(ns.land).find(k=>setupLandOK(ns,k));placeExplorer(ns,e.id,k);}
@@ -1031,6 +1145,7 @@ function unitLabel(sel){
 /* ---------- render ---------- */
 function render(){
   document.body.classList.toggle('gm',mode==='game');
+  document.body.classList.toggle('tv',(mode==='game'||mode==='lobby')&&isTV());
   if(mode==='home')return renderHome();
   if(mode==='lobby')return renderLobby();
   if(mode==='map')return renderMap();
@@ -1074,6 +1189,8 @@ function renderHome(){
       ${!capsReady?`<p class="note">Connecting…</p>`:!onlineOK?`<p class="note">Online play isn't available: ${esc(FB_ERR||'could not connect to Firebase.')} You can still play pass-and-play on this device.</p>`:`
       <label for="nick">Your name</label><input id="nick" maxlength="16" value="${esc(nick)}" placeholder="e.g. Kyle">
       <div class="row" style="margin-top:12px"><button class="primary" id="create">Create a game</button></div>
+      <div class="row" style="margin-top:8px"><button id="createTV">📺 Host on a TV</button></div>
+      <p class="note" style="margin-top:6px">Open this page on the TV (on Fire TV, use the Silk browser) and tap <b>Host on a TV</b>. The TV shows the board for everyone, and each player joins and plays from their phone.</p>
       <label for="jcode">…or join with a room code</label>
       <div class="row"><input id="jcode" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase;flex:2" value="${esc(ui.pendingCode||'')}"><button id="join" style="flex:1">Join</button></div>
       <p class="note" style="margin-top:10px">Create a game, then send your friends the invite link or the room code.</p>`}
@@ -1115,14 +1232,34 @@ function renderHome(){
   if(onlineOK){
     const getNick=()=>{const v=document.getElementById('nick').value.trim().slice(0,16);if(!v){ui.err='Enter your name first.';render();return null;}lsSet('tf_nick',v);return v;};
     document.getElementById('create').onclick=e=>{const n=getNick();if(n){e.target.disabled=true;createOnline(n);}};
+    document.getElementById('createTV').onclick=e=>{e.target.disabled=true;createOnline('',true);};
     document.getElementById('join').onclick=e=>{const n=getNick();if(n){e.target.disabled=true;ui.pendingCode='';joinOnline(document.getElementById('jcode').value,n);}};
   }
 }
 function renderLobby(){
-  const isHost=net.meta&&net.meta.host===MYID;
+  const isHost=amHost();
   const seated=net.seats.some(x=>x.uid===MYID);
-  app.innerHTML=`
+  const tv=isTV();if(tv)keepAwake(true);
+  document.body.classList.toggle('tv',tv);
+  const tvGame=!!(net.meta&&net.meta.tv);
+  app.innerHTML=tv?`
+  <div class="tvlobby">
+    <div class="tvjoin">
+      <h1 style="text-align:left">Tide<span>fall</span></h1>
+      <p class="tvsub">Grab your phones and join the game!</p>
+      ${HOSTED?`<img class="tvqr" alt="QR code to join" src="${QR.dataURL(joinURL(),8,'#06202e','#ffffff')}"><p class="tvsub">Scan to join, or go to</p><p class="tvurl">${esc(location.host+location.pathname)}</p>`:`<p class="tvsub">On your phone, open Tidefall and join with this code:</p>`}
+      <p class="tvsub" style="margin-top:14px">Room code</p><div class="code tvcode">${esc(net.code||'')}</div>
+    </div>
+    <div class="tvcrew card">
+      <h2>Crew (${Math.min(4,net.seats.length)}/4)</h2>
+      <div class="players">${(()=>{const cs=assignColors(net.seats.slice(0,4));return net.seats.slice(0,4).map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm"></span></div>`).join('')||'<p class="note">Waiting for players to join…</p>';})()}</div>
+      <p class="note">${net.seats.length<2?'At least 2 players are needed.':'Ready! Start from here or from the first player’s phone.'}</p>
+      <div class="actions"><button class="primary" id="start" ${net.seats.length<2?'disabled':''}>Start game</button><button class="ghost" id="leave">Exit</button></div>
+      ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
+    </div>
+  </div>`:`
   <h1>Tide<span>fall</span></h1>
+  ${tvGame?`<div class="status">📺 This game is on the TV. Keep this phone handy: it's your controller, with your own values and kept tiles.</div>`:''}
   <div class="card" style="text-align:center">
     <div class="note">Room code</div>
     <div class="code">${esc(net.code||'')}</div>
@@ -1134,7 +1271,7 @@ function renderLobby(){
     <h2>Crew (${net.seats.length}/4)</h2>
     ${(()=>{const mine=net.seats.find(x=>x.uid===MYID);if(!mine)return'';const others=assignColors(net.seats.slice(0,4)).filter((c,i)=>net.seats[i]&&net.seats[i].uid!==MYID);
       return `<label>Your color</label>${swatchRow('seatcol',assignColors(net.seats.slice(0,4))[net.seats.indexOf(mine)],others)}`;})()}
-    <div class="players">${(()=>{const cs=assignColors(net.seats.slice(0,4));return net.seats.slice(0,4).map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm"></span>${x.uid===net.meta?.host?'<span class="st">host</span>':''}</div>`).join('')||'<p class="note">Waiting for players…</p>';})()}</div>
+    <div class="players">${(()=>{const cs=assignColors(net.seats.slice(0,4));return net.seats.slice(0,4).map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm"></span>${x.uid===net.meta?.host||(net.meta?.tv&&i===0)?'<span class="st">host</span>':''}</div>`).join('')||'<p class="note">Waiting for players…</p>';})()}</div>
     ${net.seats.length>4?'<p class="note">Only the first 4 players get a seat.</p>':''}
     <div class="actions">
       ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><button class="primary" id="start" ${net.seats.length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
@@ -1143,6 +1280,7 @@ function renderLobby(){
     ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
   </div>`;
   document.querySelectorAll('.players .nm').forEach((el,i)=>el.textContent=net.seats[i].nick+(net.seats[i].uid===MYID?' (you)':''));
+  if(tv){const st=document.getElementById('start');if(st)st.onclick=()=>{st.disabled=true;startOnline();};document.getElementById('leave').onclick=goHome;setTimeout(()=>{const b=document.getElementById('start');if(b&&!b.disabled)b.focus();},50);return;}
   document.getElementById('copy').onclick=()=>{navigator.clipboard?.writeText(net.code).then(()=>toast('Code copied'),()=>{});};
   document.getElementById('copyLink').onclick=()=>{const u=location.origin+location.pathname+'#g-'+net.code;
     if(navigator.share)navigator.share({title:'Join my Tidefall game',text:'Join my Tidefall game! Room code '+net.code,url:u}).catch(()=>{});
@@ -1173,6 +1311,7 @@ function statusHTML(){
     return `<div class="status"><div style="font-size:17px;margin-bottom:6px">${esc(s.endReason||'Game over.')}</div><div class="score">${ranked.map(r=>`<div class="${r.pts===best?'w':''}"><span style="color:${r.p.color}">●</span> ${esc(r.p.name)}: ${r.pts} pts (${plural(r.n,'explorer')} rescued)${r.pts===best?' 🏆':''}</div>`).join('')}</div></div>`;
   }
   if(!net.online&&cur.ai)return `<div class="status wait">${nm} is playing… <span class="note">(${phaseName(s)})</span></div>`;
+  if(isTV())return `<div class="status tvstatus">${nm} <span>${phaseName(s)?'is '+phaseName(s):'is up'}</span></div>`;
   if(!canAct())return `<div class="status wait">Waiting for ${nm}… <span class="note">(${phaseName(s)})</span></div>`;
   const P=s.pending;let t='';
   if(s.phase==='setupE')t=s.blind?`${nm}, tap any empty land tile to place an explorer.`:`${nm}, choose an explorer below, then tap any empty land tile.`;
@@ -1255,7 +1394,7 @@ function renderGame(){
     <div class="actions">${playable.map(fx=>`<button class="small primary" data-play="${fx}">Play ${FX[fx].icon} ${FX[fx].name}</button>`).join('')}<button class="small ghost" id="skipPrompt">Not now</button></div></div>`:'';
   const guideCard=ui.guide?`<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📖 Tile guide</h2><button class="small ghost" id="guideClose" style="flex:0 0 auto">Close</button></div>${guideHTML()}</div>`:'';
   const rv=!s.reveal?'':revealHidden(s.reveal)?`<div class="card reveal"><span class="big">🂠</span><span><b>Last sunk tile: kept in secret</b><br><span class="note">${esc(s.players[s.reveal.by].name)} is holding it until they play it.</span></span></div>`:`<div class="card reveal"><span class="big">${FX[s.reveal.fx].icon}</span><span><b>Last sunk tile: ${FX[s.reveal.fx].name}</b><br><span class="note">${FX[s.reveal.fx].desc}</span></span></div>`;
-  const isHost=net.online&&net.meta&&net.meta.host===MYID;
+  const isHost=net.online&&amHost();const tv=isTV();if(tv)keepAwake(true);
   app.innerHTML=`
   <div class="topbar"><div class="t">Tide<span>fall</span>${net.online?` <span class="note" style="font-family:Inter">room ${esc(net.code)}</span>`:''}${s.blind?' <span class="note" style="font-family:Inter">· hidden values</span>':''}${anyHouse(s)?' <span class="note" style="font-family:Inter">· house rules</span>':''}</div>
     <div class="row" style="flex:0 0 auto">
@@ -1270,7 +1409,7 @@ function renderGame(){
       ${isHost&&s.phase!=='ended'&&s.turn!==me?`<button class="small ghost" id="skip">Skip stuck turn</button>`:''}
       <button class="small ghost" id="home">Exit</button>
     </div></div>
-  ${net.online&&me<0?'<div class="status wait">You are watching this game.</div>':''}
+  ${net.online&&me<0&&!tv?'<div class="status wait">You are watching this game.</div>':''}
   <div class="game">
     <div class="boardcol">
       <div class="boardwrap ${ui.view3d?'b3':(ui.zoom?'zoom':'')}" id="bw">${ui.view3d?'':boardSVG()}</div>
