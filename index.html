@@ -548,7 +548,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v33-firebase';
+const BUILD='v34-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -919,17 +919,20 @@ function checkFx(){
 /* ---------- computer turns (local games) ---------- */
 const AI={paused:false,speed:1,timer:null};
 const SPEEDS=[{n:'Slow',ms:1300},{n:'Normal',ms:650},{n:'Fast',ms:220}];
+const BOT_NAMES=['Captain Reed','Admiral Vex','Skipper Moss','Navigator Ines'];
+function aiDriver(){return !net.online||!!(net.meta&&net.meta.host===MYID);}
 function scheduleAI(){
-  if(AI.timer||AI.paused||net.online||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
+  if(AI.timer||AI.paused||!aiDriver()||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
   let ms=S.phase.startsWith('setup')?Math.min(160,SPEEDS[AI.speed].ms):SPEEDS[AI.speed].ms;
   if(!S.phase.startsWith('setup'))ms=Math.max(ms,(fxBusyUntil-Date.now())*(AI.speed===2?.6:1)+250+(FXQ.length?2600:0));
   AI.timer=setTimeout(()=>{AI.timer=null;runAI();},ms);
 }
 function runAI(){
-  if(net.online||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
+  if(!aiDriver()||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
   const ns=clone(S);ns.hl=null;
   try{aiStep(ns);}catch(err){console.error(err);log(ns,'(Computer skipped a stuck step.)');endTurn(ns);}
-  afterAction(ns);ns.v=(S.v||0)+1;pushHist(S,ns);S=ns;ui.sel=null;ui.picker=null;render();
+  afterAction(ns);ns.v=(S.v||0)+1;pushHist(S,ns);ui.sel=null;ui.picker=null;
+  if(net.online)commit(ns);else{S=ns;render();}
 }
 /* ---------- online ---------- */
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ';let c='';for(let i=0;i<5;i++)c+=A[Math.floor(Math.random()*A.length)];return c;}
@@ -982,10 +985,22 @@ function enterOnline(code){
   render();
 }
 function leaveOnline(){net.unsubs.forEach(u=>{try{u();}catch{}});net.unsubs=[];net.online=false;net.ref=null;net.meta=null;net.seats=[];net.code=null;}
+// the lobby's players: people who joined, then any computer players the host added, 4 at most
+function crew(){const bots=(net.meta&&net.meta.bots)||[];return[...net.seats.map(x=>({...x,bot:false})),...bots.map(b=>({...b,bot:true}))].slice(0,4);}
+async function addBot(){const bots=((net.meta&&net.meta.bots)||[]).slice();if(crew().length>=4)return;
+  const used=new Set(bots.map(b=>b.nick));const nick=BOT_NAMES.find(n=>!used.has(n))||('Computer '+(bots.length+1));
+  bots.push({uid:'bot-'+Math.random().toString(36).slice(2,8),nick,at:Date.now()});
+  try{await net.ref.update({bots});}catch(e){toast(writeErr(e));}}
+async function removeBot(uid){const bots=((net.meta&&net.meta.bots)||[]).filter(b=>b.uid!==uid);try{await net.ref.update({bots});}catch(e){toast(writeErr(e));}}
+function crewHTML(showHost){const c=crew(),cs=assignColors(c),host=amHost();
+  return c.map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm" data-crew="${i}"></span>${x.bot?'<span class="st">computer</span>':''}${showHost&&!x.bot&&(x.uid===net.meta?.host||(net.meta?.tv&&i===0))?'<span class="st">host</span>':''}${x.bot&&host?`<button class="small ghost" data-rmbot="${esc(x.uid)}" style="min-height:30px;padding:4px 10px;flex:0 0 auto">✕</button>`:''}</div>`).join('');}
+function wireCrew(){const c=crew();document.querySelectorAll('[data-crew]').forEach(el=>{const x=c[+el.dataset.crew];el.textContent=(x.bot?'🤖 ':'')+x.nick+(x.uid===MYID?' (you)':'');});
+  document.querySelectorAll('[data-rmbot]').forEach(b=>b.onclick=()=>removeBot(b.dataset.rmbot));
+  const ab=document.getElementById('addBot');if(ab)ab.onclick=()=>{ab.disabled=true;addBot();};}
 async function startOnline(){
-  const seats=net.seats.slice(0,4);
+  const seats=crew();
   if(seats.length<2){toast('Need at least 2 players.');return;}
-  const st=newGame(seats.map(x=>({id:x.uid,name:x.nick,color:x.color})),{blind:!!ui.blindOnline,emptyBoats:!!ui.houseOnline,whirlLand:!!ui.whirlOnline});
+  const st=newGame(seats.map(x=>x.bot?{id:x.uid,name:'🤖 '+x.nick,color:x.color,ai:true}:{id:x.uid,name:x.nick,color:x.color}),{blind:!!ui.blindOnline,emptyBoats:!!ui.houseOnline,whirlLand:!!ui.whirlOnline});
   S=st;mode='game';render();
   try{await net.ref.update({status:'playing',state:JSON.stringify(st),v:st.v});}catch(e){toast(writeErr(e));}
 }
@@ -1252,10 +1267,10 @@ function renderLobby(){
       <p class="tvsub" style="margin-top:14px">Room code</p><div class="code tvcode">${esc(net.code||'')}</div>
     </div>
     <div class="tvcrew card">
-      <h2>Crew (${Math.min(4,net.seats.length)}/4)</h2>
-      <div class="players">${(()=>{const cs=assignColors(net.seats.slice(0,4));return net.seats.slice(0,4).map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm"></span></div>`).join('')||'<p class="note">Waiting for players to join…</p>';})()}</div>
-      <p class="note">${net.seats.length<2?'At least 2 players are needed.':'Ready! Start from here or from the first player’s phone.'}</p>
-      <div class="actions"><button class="primary" id="start" ${net.seats.length<2?'disabled':''}>Start game</button><button class="ghost" id="leave">Exit</button></div>
+      <h2>Crew (${crew().length}/4)</h2>
+      <div class="players">${crewHTML(false)||'<p class="note">Waiting for players to join…</p>'}</div>
+      <p class="note">${crew().length<2?'At least 2 players are needed. Add computer players to fill empty seats.':'Ready! Start from here or from the first player’s phone.'}</p>
+      <div class="actions"><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>${crew().length<4?'<button id="addBot">🤖 Add computer</button>':''}<button class="ghost" id="leave">Exit</button></div>
       ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
     </div>
   </div>`:`
@@ -1269,18 +1284,19 @@ function renderLobby(){
     <p class="note" style="word-break:break-all;margin-top:8px">${esc(location.origin+location.pathname+'#g-'+(net.code||''))}</p>
   </div>
   <div class="card">
-    <h2>Crew (${net.seats.length}/4)</h2>
-    ${(()=>{const mine=net.seats.find(x=>x.uid===MYID);if(!mine)return'';const others=assignColors(net.seats.slice(0,4)).filter((c,i)=>net.seats[i]&&net.seats[i].uid!==MYID);
-      return `<label>Your color</label>${swatchRow('seatcol',assignColors(net.seats.slice(0,4))[net.seats.indexOf(mine)],others)}`;})()}
-    <div class="players">${(()=>{const cs=assignColors(net.seats.slice(0,4));return net.seats.slice(0,4).map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm"></span>${x.uid===net.meta?.host||(net.meta?.tv&&i===0)?'<span class="st">host</span>':''}</div>`).join('')||'<p class="note">Waiting for players…</p>';})()}</div>
-    ${net.seats.length>4?'<p class="note">Only the first 4 players get a seat.</p>':''}
+    <h2>Crew (${crew().length}/4)</h2>
+    ${(()=>{const c=crew(),i=c.findIndex(x=>x.uid===MYID);if(i<0)return'';const cs=assignColors(c);
+      return `<label>Your color</label>${swatchRow('seatcol',cs[i],cs.filter((x,j)=>j!==i))}`;})()}
+    <div class="players">${crewHTML(true)||'<p class="note">Waiting for players…</p>'}</div>
+    ${net.seats.length+((net.meta&&net.meta.bots)||[]).length>4?'<p class="note">Only the first 4 players get a seat.</p>':''}
+    ${isHost&&crew().length<4?'<div class="actions"><button id="addBot">🤖 Add computer</button><span class="note" style="flex:2">Fill empty seats with computer players.</span></div>':''}
     <div class="actions">
-      ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><button class="primary" id="start" ${net.seats.length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
+      ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
       <button class="ghost" id="leave">Leave</button>
     </div>
     ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
   </div>`;
-  document.querySelectorAll('.players .nm').forEach((el,i)=>el.textContent=net.seats[i].nick+(net.seats[i].uid===MYID?' (you)':''));
+  wireCrew();
   if(tv){const st=document.getElementById('start');if(st)st.onclick=()=>{st.disabled=true;startOnline();};document.getElementById('leave').onclick=goHome;setTimeout(()=>{const b=document.getElementById('start');if(b&&!b.disabled)b.focus();},50);return;}
   document.getElementById('copy').onclick=()=>{navigator.clipboard?.writeText(net.code).then(()=>toast('Code copied'),()=>{});};
   document.getElementById('copyLink').onclick=()=>{const u=location.origin+location.pathname+'#g-'+net.code;
@@ -1311,7 +1327,7 @@ function statusHTML(){
     const ranked=s.players.map((p,i)=>({p,i,...sc[i]})).sort((a,b)=>b.pts-a.pts);
     return `<div class="status"><div style="font-size:17px;margin-bottom:6px">${esc(s.endReason||'Game over.')}</div><div class="score">${ranked.map(r=>`<div class="${r.pts===best?'w':''}"><span style="color:${r.p.color}">●</span> ${esc(r.p.name)}: ${r.pts} pts (${plural(r.n,'explorer')} rescued)${r.pts===best?' 🏆':''}</div>`).join('')}</div></div>`;
   }
-  if(!net.online&&cur.ai)return `<div class="status wait">${nm} is playing… <span class="note">(${phaseName(s)})</span></div>`;
+  if(cur.ai&&!isTV())return `<div class="status wait">${nm} is playing… <span class="note">(${phaseName(s)})</span></div>`;
   if(isTV())return `<div class="status tvstatus">${nm} <span>${phaseName(s)?'is '+phaseName(s):'is up'}</span></div>`;
   if(!canAct())return `<div class="status wait">Waiting for ${nm}… <span class="note">(${phaseName(s)})</span></div>`;
   const P=s.pending;let t='';
