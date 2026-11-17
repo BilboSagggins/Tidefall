@@ -113,6 +113,11 @@ body.tv .log{max-height:30vh;font-size:15px}
 body.tv .cine3d .ct{font-size:22px}
 body.tv .cine3d .cs{font-size:18px}
 body.tv .cap3d{font-size:20px}
+#padcur{position:fixed;z-index:40;pointer-events:none;border-radius:50%;border:3px solid #fde047;box-shadow:0 0 0 2px #0008,0 0 14px #fde047aa;display:none;transition:left .09s,top .09s,width .09s,height .09s}
+#padcur.hot{border-color:#4ade80;box-shadow:0 0 0 2px #0008,0 0 16px #4ade80cc}
+#padhint{position:fixed;z-index:45;left:50%;bottom:8px;transform:translateX(-50%);display:none;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;background:rgba(4,20,32,.88);border:1px solid #ffffff22;border-radius:999px;padding:5px 14px;font-size:12px;color:#cbd5e1;pointer-events:none}
+#padhint b{color:#fde047}#padhint span{opacity:.4}
+body.padui :focus{outline:3px solid #fde047!important;outline-offset:2px;box-shadow:0 0 12px #fde04799}
 .tutor{position:fixed;inset:0;z-index:60;background:rgba(2,12,20,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:12px;animation:fxIn .2s ease-out}
 .tutbox{width:min(560px,100%);max-height:96vh;overflow:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--accent);border-radius:18px;padding:14px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .tuthead{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
@@ -562,7 +567,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v35-firebase';
+const BUILD='v36-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -1561,6 +1566,179 @@ function renderGame(){
   maybeTutorial();
   scheduleAI();
 }
+/* ================= game controller + keyboard support ================= */
+// Xbox / standard gamepad: stick or D-pad moves a cursor over the board, A selects, B cancels,
+// X does the main action, Y jumps to the buttons, LB/RB hop between highlighted spaces.
+// Menus and pop-ups are driven by moving a focus ring between buttons.
+const PAD=(()=>{
+  try{navigator.gamepadInputEmulation='gamepad';}catch{}
+  let active=false,uiMode=false,autoUI=false,hex=null,lastSig='',prevBtn=[],stickT=0,stickDir=null,rafOn=false,lastFocusSel=null;
+  const st={get active(){return active;},get uiMode(){return uiMode;},get hex(){return hex;}};
+  const BTN={A:0,B:1,X:2,Y:3,LB:4,RB:5,LT:6,RT:7,VIEW:8,MENU:9,RS:11,UP:12,DOWN:13,LEFT:14,RIGHT:15};
+  function cursorEl(){let c=document.getElementById('padcur');if(!c){c=document.createElement('div');c.id='padcur';document.body.appendChild(c);}return c;}
+  function hintEl(){let c=document.getElementById('padhint');if(!c){c=document.createElement('div');c.id='padhint';document.body.appendChild(c);}return c;}
+  function activate(){if(!active){active=true;document.body.classList.add('padui');}if(!rafOn){rafOn=true;requestAnimationFrame(loop);}}
+  // ---------- what is on screen ----------
+  const overlay=()=>document.getElementById('tutor');
+  const popup=()=>document.querySelector('.fx');
+  const inGame=()=>mode==='game'&&S&&!isTV();
+  const boardMode=()=>inGame()&&!overlay()&&!popup()&&!uiMode;
+  function hexScreen(k){
+    if(ui.view3d)return B3.hexScreen?B3.hexScreen(k):null;
+    const el=document.querySelector(`#board [data-k="${k}"]`);if(!el)return null;const r=el.getBoundingClientRect();
+    if(!r.width)return null;return[r.left+r.width/2,r.top+r.height/2,Math.min(r.width,r.height)/2];}
+  function allHexes(){const out=[];for(const k of[...ALL,...ISLES]){const p=hexScreen(k);if(p)out.push([k,p]);}return out;}
+  function targets(){const s=S;if(!s||!canAct())return[];const t=new Set();
+    for(const k of uiDests(s,ui.sel))t.add(k);
+    if(s.phase==='creature'||s.pending)for(const c of movableCreatures(s))t.add(c.hex);
+    if(s.phase==='remove')for(const k of removable(s))t.add(k);
+    if(s.phase==='setupE'||s.phase==='setupB')for(const k of ALL)if(s.phase==='setupE'?setupLandOK(s,k):setupBoatOK(s,k))t.add(k);
+    if(s.phase==='move'&&!ui.sel){for(const e of s.explorers)if(e.o===s.turn&&e.st==='on')t.add(posOf(s,e));
+      for(const b of s.boats){const pas=s.explorers.filter(e=>e.boat===b.id&&e.st==='on');if(!pas.length||pas.some(e=>e.o===s.turn))t.add(b.hex);}}
+    return[...t].filter(k=>k&&(ALL.includes(k)||ISLES.includes(k)));}
+  function selHex(){const s=S;if(!s||!ui.sel)return null;const[t,id]=ui.sel.split(':');
+    if(t==='e'){const e=s.explorers.find(x=>x.id===id);return e&&e.st==='on'?posOf(s,e):null;}
+    if(t==='b'){const b=boatById(s,id);return b?b.hex:null;}if(t==='c'){const c=s.creatures.find(x=>x.id===id);return c?c.hex:null;}return null;}
+  function nearestTo(from,keys){const pf=from&&hexScreen(from);if(!pf)return keys[0];let best=keys[0],bd=1e9;
+    for(const k of keys){const p=hexScreen(k);if(!p)continue;const d=Math.hypot(p[0]-pf[0],p[1]-pf[1]);if(d<bd){bd=d;best=k;}}return best;}
+  function ensureHex(){
+    const sig=S?[S.gid,S.turnNo,S.turn,S.phase,S.moves,ui.sel,!!S.pending,canAct()].join('|'):'';
+    if(sig!==lastSig){lastSig=sig;const t=targets();
+      if(t.length&&!t.includes(hex))hex=t.includes(selHex())?selHex():nearestTo(hex||selHex()||CENTER,t);}
+    if(!hex||!hexScreen(hex))hex=selHex()||CENTER;}
+  function moveHex(dx,dy){ensureHex();const p0=hexScreen(hex);if(!p0)return;let best=null,bs=1e9;
+    const n=Math.hypot(dx,dy)||1;dx/=n;dy/=n;
+    for(const[k,p]of allHexes()){if(k===hex)continue;const vx=p[0]-p0[0],vy=p[1]-p0[1],d=Math.hypot(vx,vy);if(d<2)continue;
+      const cos=(vx*dx+vy*dy)/d;if(cos<.5)continue;const sc=d*(1+(1-cos)*3);if(sc<bs){bs=sc;best=k;}}
+    if(best){hex=best;reveal();}}
+  function cycle(dir){const t=targets();if(!t.length){toast('Nothing to pick right now.');return;}
+    const pos=t.map(k=>[k,hexScreen(k)]).filter(x=>x[1]).sort((a,b)=>(a[1][1]-b[1][1])>20||(a[1][1]-b[1][1])<-20?a[1][1]-b[1][1]:a[1][0]-b[1][0]).map(x=>x[0]);
+    let i=pos.indexOf(hex);i=i<0?(dir>0?0:pos.length-1):(i+dir+pos.length)%pos.length;hex=pos[i];reveal();}
+  function reveal(){if(ui.view3d)return;const el=document.querySelector(`#board [data-k="${hex}"]`);
+    const bw=document.getElementById('bw');if(el&&bw&&ui.zoom){const r=el.getBoundingClientRect(),w=bw.getBoundingClientRect();
+      if(r.left<w.left+20||r.right>w.right-20||r.top<w.top+20||r.bottom>w.bottom-20)bw.scrollBy({left:(r.left+r.right)/2-(w.left+w.right)/2,top:(r.top+r.bottom)/2-(w.top+w.bottom)/2,behavior:'smooth'});}}
+  // ---------- buttons / focus ----------
+  const FOC='button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href],[data-tile]';
+  function scope(){const o=overlay();if(o)return o;if(inGame()&&ui.picker){const p=document.querySelector('.controls .picker');if(p)return p;}return document;}
+  function focusables(){return[...scope().querySelectorAll(FOC)].filter(el=>{const r=el.getBoundingClientRect();
+    if(!r.width||!r.height)return false;const cs=getComputedStyle(el);if(cs.visibility==='hidden')return false;
+    return r.right>0&&r.left<innerWidth;});}
+  function cur(){const a=document.activeElement;return a&&a!==document.body&&a.isConnected&&scope().contains(a)&&a.matches(FOC)?a:null;}
+  function selOf(el){if(!el)return null;if(el.id)return'#'+CSS.escape(el.id);for(const at of['data-pick','data-play','data-col','data-tile','data-res','data-rmbot'])if(el.hasAttribute(at))return`[${at}="${CSS.escape(el.getAttribute(at))}"]`;return null;}
+  function focus(el){if(!el)return;try{el.focus({preventScroll:false});}catch{el.focus();}lastFocusSel=selOf(el);
+    const r=el.getBoundingClientRect();if(r.top<0||r.bottom>innerHeight)el.scrollIntoView({block:'center',behavior:'smooth'});}
+  function firstFocus(){const f=focusables();if(!f.length)return null;
+    return f.find(el=>el.id==='tutNext')||f.find(el=>el.matches('.picker button'))||(inGame()?f.find(el=>el.closest('.controls')&&el.tagName==='BUTTON'):null)||f.find(el=>el.classList.contains('primary')&&el.tagName==='BUTTON')||f[0];}
+  function ensureFocus(){let c=cur();if(c)return c;if(lastFocusSel){const el=scope().querySelector(lastFocusSel);if(el&&focusables().includes(el)){focus(el);return el;}}
+    const f=firstFocus();if(f)focus(f);return f;}
+  function moveFocus(dx,dy){const c=cur();if(!c){ensureFocus();return;}
+    if(c.tagName==='SELECT'&&dx&&!dy){const n=c.options.length;c.selectedIndex=(c.selectedIndex+(dx>0?1:-1)+n)%n;c.dispatchEvent(new Event('change',{bubbles:true}));c.dispatchEvent(new Event('input',{bubbles:true}));return;}
+    const r=c.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let best=null,bs=1e9;
+    for(const el of focusables()){if(el===c)continue;const q=el.getBoundingClientRect();
+      // distance from the edge of the current element in the asked direction
+      let along,side;
+      if(dx){along=dx>0?q.left-r.right+r.width*.0:r.left-q.right;side=Math.abs((q.top+q.height/2)-cy);if(dx>0?q.left+q.width/2<=cx+2:q.left+q.width/2>=cx-2)continue;}
+      else{along=dy>0?q.top-r.bottom:r.top-q.bottom;side=Math.abs((q.left+q.width/2)-cx);if(dy>0?q.top+q.height/2<=cy+2:q.top+q.height/2>=cy-2)continue;}
+      const sc=Math.max(0,along)+side*2.2;if(sc<bs){bs=sc;best=el;}}
+    if(best)focus(best);}
+  function press(el){if(!el)return;if(el.tagName==='INPUT'&&(el.type==='text'||el.type==='number'||el.type==='search'||!el.type)){el.focus();try{el.select();}catch{}return;}
+    if(el.tagName==='SELECT'){const n=el.options.length;el.selectedIndex=(el.selectedIndex+1)%n;el.dispatchEvent(new Event('change',{bubbles:true}));return;}
+    el.click();}
+  function enterUI(auto){uiMode=true;autoUI=!!auto;lastFocusSel=null;ensureFocus();}
+  function exitUI(){uiMode=false;autoUI=false;const a=document.activeElement;if(a&&a.blur)a.blur();}
+  // ---------- actions ----------
+  const MAIN=['roll','sink','done','endPend','skipC','again'];
+  function mainBtn(){for(const id of MAIN){const b=document.getElementById(id);if(b&&!b.disabled&&b.offsetParent!==null)return b;}return null;}
+  function cancel(){
+    if(ui.picker||ui.sel||ui.removeSel){ui.picker=null;ui.sel=null;ui.removeSel=null;render();return true;}
+    if(ui.info||ui.guide){ui.info=false;ui.guide=false;render();return true;}
+    if(ui.openTile!=null){ui.openTile=null;render();return true;}return false;}
+  function onButton(b){activate();
+    const o=overlay(),pu=popup();
+    if(pu&&!o){if(b===BTN.A||b===BTN.B||b===BTN.X)pu.click();return;}
+    if(o){if(b===BTN.B||b===BTN.MENU){const sk=o.querySelector('#tutSkip');if(sk)sk.click();return;}
+      if(b===BTN.LB){const x=o.querySelector('#tutBack');if(x&&!x.disabled)x.click();return;}
+      if(b===BTN.RB){const x=o.querySelector('#tutNext');if(x)x.click();return;}
+      if(b===BTN.A){press(ensureFocus());}return;}
+    if(!inGame()){ // home screen, lobby, TV screen
+      if(b===BTN.A)press(cur()||ensureFocus());
+      else if(b===BTN.B){const a=document.activeElement;if(a&&a.tagName==='INPUT')a.blur();else{const bk=document.getElementById('back')||document.getElementById('leave');if(bk&&mode!=='home')bk.click();}}
+      return;}
+    if(b===BTN.MENU){openTutorial(true);return;}
+    if(b===BTN.VIEW){ui.info=!ui.info;ui.guide=false;render();return;}
+    if(b===BTN.RS){if(ui.view3d)B3.resetView();return;}
+    if(b===BTN.LT||b===BTN.RT){if(ui.view3d)B3.zoom(b===BTN.RT?.8:1.25);else{ui.zoom=b===BTN.RT;render();}return;}
+    if(b===BTN.X){const m=mainBtn();if(m){exitUI();m.click();}return;}
+    if(uiMode){
+      if(b===BTN.A){const c=cur()||ensureFocus();const wasPick=c&&c.matches('[data-pick]');press(c);if(wasPick||autoUI&&!ui.picker)setTimeout(()=>{if(!ui.picker&&uiMode&&(wasPick||autoUI))exitUI();},0);}
+      else if(b===BTN.B){if(ui.picker){ui.picker=null;render();}exitUI();}
+      else if(b===BTN.Y)exitUI();
+      return;}
+    // board mode
+    if(b===BTN.A){ensureHex();onHex(hex);}
+    else if(b===BTN.B)cancel();
+    else if(b===BTN.Y)enterUI(false);
+    else if(b===BTN.LB)cycle(-1);else if(b===BTN.RB)cycle(1);
+  }
+  function onDir(dx,dy){activate();
+    const o=overlay(),pu=popup();if(pu&&!o)return;
+    if(o){if(dx&&!dy&&!(cur()&&cur().closest('.tutopt'))){const x=o.querySelector(dx>0?'#tutNext':'#tutBack');const c=cur();if(c&&(c.id==='tutNext'||c.id==='tutBack'||c.id==='tutSkip')){moveFocus(dx,0);return;}if(x&&!x.disabled){focus(x);return;}}moveFocus(Math.sign(dx),dx?0:Math.sign(dy));return;}
+    if(boardMode()){moveHex(dx,dy);return;}
+    if(Math.abs(dx)>Math.abs(dy))moveFocus(Math.sign(dx),0);else moveFocus(0,Math.sign(dy));}
+  // ---------- drawing ----------
+  function draw(){
+    const c=cursorEl(),h=hintEl();
+    const show=active&&boardMode();
+    if(show){ensureHex();const p=hexScreen(hex);
+      if(p){c.style.display='block';const r=Math.max(14,p[2]*1.05);c.style.left=(p[0]-r)+'px';c.style.top=(p[1]-r)+'px';c.style.width=c.style.height=(2*r)+'px';
+        const t=targets();c.classList.toggle('hot',t.includes(hex));}else c.style.display='none';}
+    else c.style.display='none';
+    if(active&&inGame()&&!overlay()){const m=mainBtn();const txt=m?m.textContent.replace(/\s+/g,' ').trim():'';
+      const parts=uiMode?['<b>Ⓐ</b> press','<b>Ⓑ</b> back to board','<b>✛</b> move between buttons']:
+        ['<b>Ⓐ</b> select','<b>Ⓑ</b> cancel',txt?`<b>Ⓧ</b> ${esc(txt)}`:'','<b>Ⓨ</b> buttons','<b>LB/RB</b> next piece','<b>☰</b> rules'];
+      const html=parts.filter(Boolean).join('<span>·</span>');if(h.innerHTML!==html)h.innerHTML=html;h.style.display='flex';}
+    else h.style.display='none';}
+  // ---------- polling ----------
+  function loop(){rafOn=false;
+    const pads=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
+    let dx=0,dy=0,rx=0,ry=0;
+    for(let pi=0;pi<pads.length;pi++){const g=pads[pi];const prev=prevBtn[g.index]||[];const now=g.buttons.map(b=>b.pressed||b.value>.5);
+      now.forEach((p,i)=>{if(p&&!prev[i]&&(i<12||i>15))onButton(i);});
+      prevBtn[g.index]=now;
+      let x=(now[BTN.RIGHT]?1:0)-(now[BTN.LEFT]?1:0),y=(now[BTN.DOWN]?1:0)-(now[BTN.UP]?1:0);
+      const ax=g.axes[0]||0,ay=g.axes[1]||0;if(!x&&!y&&Math.hypot(ax,ay)>.55){x=ax;y=ay;}
+      if((x||y)&&!dx&&!dy){dx=x;dy=y;}
+      const a2=g.axes[2]||0,a3=g.axes[3]||0;if(Math.hypot(a2,a3)>Math.hypot(rx,ry)){rx=a2;ry=a3;}}
+    const t=performance.now();
+    if(dx||dy){const key=Math.round(Math.atan2(dy,dx)/(Math.PI/4));
+      if(stickDir!==key||t>stickT){onDir(dx,dy);stickT=t+(stickDir===key?140:340);stickDir=key;}}
+    else stickDir=null;
+    // right stick: turn the 3D camera, or scroll
+    if(Math.hypot(rx,ry)>.2){activate();
+      if(overlay())(overlay().querySelector('.tutbox')||document.scrollingElement).scrollBy(0,ry*14);
+      else if(inGame()&&ui.view3d&&B3.orbit)B3.orbit(rx*.04,ry*.03);
+      else{const sp=inGame()&&(document.querySelector('.side.open')||(ui.zoom&&!ui.view3d&&document.getElementById('bw')));(sp||document.scrollingElement).scrollBy(rx*14,ry*14);}}
+    if(uiMode&&!inGame())uiMode=false;
+    if(uiMode&&inGame()&&!overlay()){if(!ui.picker&&autoUI)exitUI();else if(!cur())ensureFocus();}
+    if(!uiMode&&inGame()&&ui.picker&&!overlay()&&active)enterUI(true);
+    if(overlay()&&active&&!cur())ensureFocus();
+    draw();
+    if(pads.length||active){rafOn=true;requestAnimationFrame(loop);}}
+  addEventListener('gamepadconnected',e=>{activate();toast('🎮 Controller connected: stick moves, Ⓐ selects, Ⓑ cancels, Ⓨ for buttons.');});
+  // keyboard does the same (arrow keys, Enter, Esc, Space, Q/E)
+  addEventListener('keydown',e=>{
+    const tg=e.target,typing=tg&&(tg.tagName==='INPUT'&&tg.type!=='checkbox'||tg.tagName==='TEXTAREA'||tg.tagName==='SELECT');
+    if(typing){if(e.key==='Escape')tg.blur();return;}
+    const dirs={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+    if(dirs[e.key]){e.preventDefault();onDir(...dirs[e.key]);return;}
+    const map={Escape:BTN.B,' ':BTN.X,y:BTN.Y,Y:BTN.Y,q:BTN.LB,Q:BTN.LB,e:BTN.RB,E:BTN.RB};
+    if(e.key==='Enter'){if(boardMode()||overlay()&&!cur()){e.preventDefault();onButton(BTN.A);}else{activate();}return;}
+    if(map[e.key]!==undefined&&(map[e.key]!==BTN.X||boardMode())){e.preventDefault();onButton(map[e.key]);}
+  });
+  addEventListener('pointerdown',e=>{if(e.pointerType==='touch'&&active){active=false;uiMode=false;document.body.classList.remove('padui');}},true);
+  if(navigator.getGamepads&&[...navigator.getGamepads()].some(Boolean))activate();
+  return st;
+})();
 /* ================= 3D view (self-contained WebGL, no libraries) ================= */
 const B3=(()=>{
 let canvas=null,gl=null,ok=false,tried=false,running=false,W=1,H=1,DPR=1;
@@ -2456,6 +2634,9 @@ function drawDie(tn,time){
 
 return{attach,sync,resetView,get ok(){return ok;},get tried(){return tried;},supported(){if(!tried)init();return ok;},
   zoom(f){cam.dist=clamp(cam.dist*f,cam.fit*.35,cam.fit*1.5);},
+  orbit(dx,dy){cam.user=true;cam.yaw-=dx;cam.pitch=clamp(cam.pitch+dy,.42,1.45);},
+  hexScreen(k){if(!ok||!VP||!S||!canvas||!canvas.isConnected)return null;const[x,z]=WP(k);const y=isIsle(k)?.15:surf(S,k);const a=project([x,y,z]),b=project([x+.5,y,z]),c=project([x,y,z+.5]);
+    return[a[0],a[1],Math.max(Math.hypot(b[0]-a[0],b[1]-a[1]),Math.hypot(c[0]-a[0],c[1]-a[1]))*1.6];},
   rollButton(){if(!ok)return false;const th=dieWait?{...randomThrow('b'+Date.now()),p:dieWait.p.slice()}:randomThrow('b'+Date.now());const face=dieResult(th);dieWait=null;act(ns=>{doRoll(ns,face);ns.lastRoll.throw=th;});return true;},
   _cam:o=>{Object.assign(cam,o,{user:true});},
   _cine:a=>queueCine(a,0),
