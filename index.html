@@ -113,6 +113,20 @@ body.tv .log{max-height:30vh;font-size:15px}
 body.tv .cine3d .ct{font-size:22px}
 body.tv .cine3d .cs{font-size:18px}
 body.tv .cap3d{font-size:20px}
+.tutor{position:fixed;inset:0;z-index:60;background:rgba(2,12,20,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:12px;animation:fxIn .2s ease-out}
+.tutbox{width:min(560px,100%);max-height:96vh;overflow:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--accent);border-radius:18px;padding:14px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.tuthead{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
+.tutbox h2{font-size:24px;margin:6px 0 10px}
+.tutvis svg{width:100%;height:auto;display:block;border-radius:14px}
+.tuttext{font-size:15px;line-height:1.5;margin:12px 2px}
+.tutdots{display:flex;gap:6px;justify-content:center;margin:6px 0 10px}
+.tutdots span{width:8px;height:8px;border-radius:50%;background:#2b5670}.tutdots span.on{background:var(--accent);width:20px;border-radius:4px}
+.tutnav{display:flex;gap:10px}.tutnav button{flex:1}
+.tutopt{display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px;color:var(--muted);margin:10px 0 2px}.tutopt input{width:auto;min-height:0}
+.tutcr{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.tutcr.tut2{grid-template-columns:repeat(2,1fr)}
+.tutcr div{background:#0c3044;border:1px solid var(--line);border-radius:12px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+.tutcr img{width:100%;max-width:120px;border-radius:12px}.tutcr b{font-size:14px}.tutcr span{font-size:12px;color:var(--muted)}
+body.tv .tutbox{width:min(900px,96vw)}body.tv .tuttext{font-size:22px}body.tv .tutbox h2{font-size:34px}
 .selbar{font-size:14px;background:#0b2a3b;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
 .mob{display:none!important}
 .sidehead{display:none}
@@ -548,7 +562,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v34-firebase';
+const BUILD='v35-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -564,7 +578,7 @@ const FIREBASE_CONFIG = {
 const app=document.getElementById('app');
 let S=null;                 // game state
 let mode='home';            // home | lobby | game
-const ui={view3d:(()=>{try{const v=localStorage.getItem('tf_3d');return v===null?true:v==='1';}catch{return true;}})(),myColor:COLORS[0],house:false,whirl:false,whirlOnline:false,houseOnline:false,info:false,guide:false,openTile:null,skipPrompt:-1,blind:false,blindOnline:false,nums:false,sel:null,picker:null,resSel:null,zoom:false,peek:false,removeSel:null,err:''};
+const ui={tutorial:(()=>{try{return localStorage.getItem('tf_tut')!=='0';}catch{return true;}})(),tutOpen:false,tutStep:0,tutDone:{},view3d:(()=>{try{const v=localStorage.getItem('tf_3d');return v===null?true:v==='1';}catch{return true;}})(),myColor:COLORS[0],house:false,whirl:false,whirlOnline:false,houseOnline:false,info:false,guide:false,openTile:null,skipPrompt:-1,blind:false,blindOnline:false,nums:false,sel:null,picker:null,resSel:null,zoom:false,peek:false,removeSel:null,err:''};
 const net={online:false,code:null,ref:null,meta:null,seats:[],unsubs:[],chain:Promise.resolve(),loaded:false};
 let DB=null,USER=null,MYID=null,capsReady=false;
 setTimeout(()=>{const c=lsGet('tf_color');if(c&&COLORS.includes(c))ui.myColor=c;},0);
@@ -874,6 +888,57 @@ const QR=(()=>{
   return{encode,dataURL};
 })();
 
+/* ---------- quick rules walkthrough, shown before a game ---------- */
+function tHex(x,y,r,fill,stroke){let p='';for(let i=0;i<6;i++){const a=Math.PI/3*i;p+=(x+r*Math.cos(a)).toFixed(1)+','+(y+r*Math.sin(a)).toFixed(1)+' ';}
+  return `<polygon points="${p}" fill="${fill}" stroke="${stroke||'#0e3f61'}" stroke-width="2"/>`;}
+const tDot=(x,y,c,n)=>`<circle cx="${x}" cy="${y}" r="9" fill="${c}" stroke="#0b1320" stroke-width="2"/>${n?`<text x="${x}" y="${y+4}" font-size="11" font-weight="800" text-anchor="middle" fill="#111">${n}</text>`:''}`;
+const tBoat=(x,y)=>`<path d="M${x-22},${y-5} L${x+22},${y-5} L${x+15},${y+8} L${x-15},${y+8} Z" fill="#8b5a2b" stroke="#2f1a08" stroke-width="2"/>`;
+const tArrow=(x1,y1,x2,y2,c='#fbbf24')=>{const a=Math.atan2(y2-y1,x2-x1),h=9;return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="3.5" stroke-linecap="round"/><path d="M${x2},${y2} L${x2-h*Math.cos(a-.5)},${y2-h*Math.sin(a-.5)} L${x2-h*Math.cos(a+.5)},${y2-h*Math.sin(a+.5)} Z" fill="${c}"/>`;};
+const tIsle=(x,y)=>`<ellipse cx="${x}" cy="${y}" rx="34" ry="20" fill="#dcc58a" stroke="#8a7440" stroke-width="2"/><text x="${x}" y="${y+7}" font-size="22" text-anchor="middle">🏝️</text>`;
+const tLbl=(x,y,t,c='#e8f1f5',sz=12)=>`<text x="${x}" y="${y}" font-size="${sz}" font-weight="700" text-anchor="middle" fill="${c}" font-family="Inter,system-ui,sans-serif">${t}</text>`;
+const tSvg=inner=>`<svg viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg"><rect width="320" height="170" rx="14" fill="#1f6496"/>${inner}</svg>`;
+const SEA='#2a77a6',BEACH='#e6d29c',FOREST='#3f7d4a',MOUNT='#857565';
+function tutSlides(){
+  const sl=[
+  {t:'Escape the sinking isle',b:'Get your explorers off the sinking island and onto the four <b>safe islands</b> in the corners. Each explorer has a secret value from <b>1 to 6</b>. When the game ends, add up the values of the explorers you saved. The highest total wins.',
+   v:tSvg(tHex(70,85,30,BEACH)+tHex(115,60,30,FOREST)+tHex(115,110,30,MOUNT)+tDot(70,85,'#ef4444',5)+tDot(115,60,'#facc15')+tDot(115,110,'#ef4444',2)+tArrow(150,85,220,85)+tIsle(260,85)+tDot(248,70,'#ef4444',6)+tDot(272,70,'#ef4444',3)+tLbl(250,130,'Saved: 6 + 3 = 9 points','#fde68a',11))},
+  {t:'Setting up',b:'Players take turns putting one explorer at a time on any <b>empty land tile</b> until everyone is ashore. Then each player places <b>2 boats</b> on the water next to the island. Five <b>sea serpents</b> start out: one in the lagoon in the middle, and one beside each safe island.',
+   v:tSvg(tHex(60,60,26,BEACH)+tHex(105,85,26,FOREST)+tHex(60,110,26,MOUNT)+tDot(60,60,'#ef4444')+tDot(105,85,'#facc15')+tDot(60,110,'#a78bfa')+tBoat(160,60)+tBoat(160,115)+tLbl(160,40,'boats')+`<image href="${dieArtURL('serpent')}" x="215" y="45" width="80" height="80"/>`+tLbl(255,145,'serpents start out'))},
+  {t:'Your turn, in 4 steps',b:'<b>1.</b> Play one kept tile, if you want to.<br><b>2.</b> Move, using up to <b>3 steps</b>.<br><b>3.</b> Sink one land tile.<br><b>4.</b> Roll the creature die and move a creature.',
+   v:tSvg([['🂠','Play a tile'],['👣','Move 3'],['🌊','Sink a tile'],['🎲','Roll']].map(([ic,l],i)=>{const x=42+i*79;return `<circle cx="${x}" cy="72" r="30" fill="#0c3044" stroke="#fbbf24" stroke-width="3"/><text x="${x}" y="82" font-size="26" text-anchor="middle">${ic}</text>`+tLbl(x,32,String(i+1),'#fbbf24',16)+tLbl(x,128,l)+(i<3?tArrow(x+33,72,x+45,72):'');}).join(''))},
+  {t:'Moving',b:'Explorers walk across land and can step into a boat next to them. In the water they become <b>swimmers</b> and move only <b>1 space per turn</b>. A boat holds <b>3</b> and carries everyone aboard; whoever has the most people in it steers. Step onto a safe island to rescue an explorer. Explorers can never climb back onto land.',
+   v:tSvg(tHex(45,85,28,FOREST)+tDot(45,85,'#ef4444')+tArrow(70,85,96,85)+tHex(125,85,28,SEA)+tBoat(125,88)+tDot(113,82,'#ef4444')+tDot(125,82,'#ef4444')+tDot(137,82,'#facc15')+tArrow(156,85,196,85)+tIsle(240,85)+tLbl(125,135,'red steers (2 vs 1)')+tLbl(45,135,'walk in')+tLbl(240,135,'rescued!','#86efac'))},
+  {t:'Sinking the island',b:'Each turn you sink one land tile that touches the water: <b>beaches first</b>, then forests, then mountains. Anyone standing on it becomes a swimmer. Then flip it over. A <span style="color:#86efac">green</span> tile happens right away; a <span style="color:#fca5a5">red</span> tile is yours to keep and use later.',
+   v:tSvg(tHex(45,70,26,BEACH)+tLbl(45,115,'1st')+tHex(110,70,26,FOREST)+tLbl(110,115,'2nd')+tHex(175,70,26,MOUNT)+tLbl(175,115,'3rd')+tArrow(70,70,82,70,'#e8f1f5')+tArrow(135,70,147,70,'#e8f1f5')+
+     tHex(240,55,22,'#0f2d40','#16a34a')+`<text x="240" y="62" font-size="18" text-anchor="middle">🦈</text>`+tLbl(240,92,'now','#86efac')+tHex(290,55,22,'#0f2d40','#dc2626')+`<text x="290" y="62" font-size="18" text-anchor="middle">🐬</text>`+tLbl(290,92,'keep','#fca5a5')+tLbl(265,135,'flip it over'))},
+  {t:'Sea creatures',b:'The die picks which creature you move.<br><b>Shark</b> (up to 2 spaces): eats swimmers.<br><b>Whale</b> (up to 3): smashes boats with people in them, tipping everyone into the sea.<br><b>Sea serpent</b> (1 space): eats swimmers and drags whole boats under.<br>Swimmers can’t enter shark or serpent spaces, and boats with people can’t enter whale or serpent spaces.',
+   v:`<div class="tutcr">${[['shark','Shark','2 spaces · eats swimmers'],['whale','Whale','3 spaces · smashes boats'],['serpent','Sea serpent','1 space · both']].map(([k,n,d])=>`<div><img src="${dieArtURL(k)}" alt=""><b>${n}</b><span>${d}</span></div>`).join('')}</div>`},
+  {t:'Whirlpools and the volcano',b:'A <b>whirlpool</b> swallows everything at sea in its space and every space touching it: swimmers, boats, even creatures. The <b>volcano</b> hides under one mountain tile. When it’s sunk the game ends at once, and anyone not on a safe island is lost. Don’t wait too long!',
+   v:`<div class="tutcr tut2">${[['whirlpool','Whirlpool','clears everything around it'],['volcano','Volcano','ends the game']].map(([k,n,d])=>`<div><img src="${dieArtURL(k)}" alt=""><b>${n}</b><span>${d}</span></div>`).join('')}</div>`}];
+  const h=S&&S.house||{},extra=[];
+  if(S&&S.blind)extra.push('<b>Hidden values:</b> nobody sees explorer values, not even their own, until the end.');
+  if(h.emptyBoats)extra.push('<b>Empty boats:</b> whales and serpents smash empty boats too.');
+  if(h.whirlLand)extra.push('<b>Land-sinking whirlpools:</b> a whirlpool also sinks the land tiles touching it, with everyone on them.');
+  if(extra.length)sl.push({t:'Special rules this game',b:extra.join('<br><br>'),v:`<div class="tutcr tut2"><div><img src="${dieArtURL('whirlpool')}" alt=""><b>House rules</b><span>on for this game</span></div></div>`});
+  return sl;
+}
+function openTutorial(force){if(document.getElementById('tutor'))return;ui.tutOpen=true;ui.tutStep=0;
+  const el=document.createElement('div');el.id='tutor';el.className='tutor';document.body.appendChild(el);drawTutorial(force);}
+function closeTutorial(){const el=document.getElementById('tutor');if(el)el.remove();ui.tutOpen=false;if(S&&S.gid)ui.tutDone[S.gid]=1;render();}
+function drawTutorial(force){const el=document.getElementById('tutor');if(!el)return;const sl=tutSlides(),i=ui.tutStep,s=sl[i],last=i===sl.length-1;
+  el.innerHTML=`<div class="tutbox"><div class="tuthead"><span>Quick rules · ${i+1} of ${sl.length}</span><button class="small ghost" id="tutSkip">${S&&mode==='game'&&!force?'Skip':'Close'}</button></div>
+    <h2>${s.t}</h2><div class="tutvis">${s.v}</div><p class="tuttext">${s.b}</p>
+    <div class="tutdots">${sl.map((_,j)=>`<span class="${j===i?'on':''}"></span>`).join('')}</div>
+    <div class="tutnav"><button class="ghost" id="tutBack" ${i?'':'disabled'}>← Back</button><button class="primary" id="tutNext">${last?(S&&mode==='game'&&!force?'Start playing':'Done'):'Next →'}</button></div>
+    <label class="tutopt"><input type="checkbox" id="tutPref" ${ui.tutorial?'checked':''}> Show this before every game</label></div>`;
+  el.querySelector('#tutSkip').onclick=closeTutorial;
+  el.querySelector('#tutBack').onclick=()=>{ui.tutStep=Math.max(0,i-1);drawTutorial(force);};
+  el.querySelector('#tutNext').onclick=()=>{if(last)closeTutorial();else{ui.tutStep=i+1;drawTutorial(force);}};
+  el.querySelector('#tutPref').onchange=e=>{ui.tutorial=e.target.checked;lsSet('tf_tut',ui.tutorial?'1':'0');};
+  setTimeout(()=>{const b=el.querySelector('#tutNext');if(b)b.focus();},30);
+}
+function maybeTutorial(){if(!ui.tutorial||!S||!S.gid||ui.tutDone[S.gid]||ui.tutOpen||S.phase==='ended'||S.turnNo>1)return;openTutorial(false);}
+
 /* ---------- dice + tile animations ---------- */
 const FXQ=[];let fxBusyUntil=0,fxRunning=false;
 const ELEV_COL={beach:'#e6d29c',forest:'#3f7d4a',mountain:'#857565'};
@@ -922,7 +987,7 @@ const SPEEDS=[{n:'Slow',ms:1300},{n:'Normal',ms:650},{n:'Fast',ms:220}];
 const BOT_NAMES=['Captain Reed','Admiral Vex','Skipper Moss','Navigator Ines'];
 function aiDriver(){return !net.online||!!(net.meta&&net.meta.host===MYID);}
 function scheduleAI(){
-  if(AI.timer||AI.paused||!aiDriver()||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
+  if(AI.timer||AI.paused||ui.tutOpen||!aiDriver()||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
   let ms=S.phase.startsWith('setup')?Math.min(160,SPEEDS[AI.speed].ms):SPEEDS[AI.speed].ms;
   if(!S.phase.startsWith('setup'))ms=Math.max(ms,(fxBusyUntil-Date.now())*(AI.speed===2?.6:1)+250+(FXQ.length?2600:0));
   AI.timer=setTimeout(()=>{AI.timer=null;runAI();},ms);
@@ -994,6 +1059,7 @@ async function addBot(){const bots=((net.meta&&net.meta.bots)||[]).slice();if(cr
 async function removeBot(uid){const bots=((net.meta&&net.meta.bots)||[]).filter(b=>b.uid!==uid);try{await net.ref.update({bots});}catch(e){toast(writeErr(e));}}
 function crewHTML(showHost){const c=crew(),cs=assignColors(c),host=amHost();
   return c.map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm" data-crew="${i}"></span>${x.bot?'<span class="st">computer</span>':''}${showHost&&!x.bot&&(x.uid===net.meta?.host||(net.meta?.tv&&i===0))?'<span class="st">host</span>':''}${x.bot&&host?`<button class="small ghost" data-rmbot="${esc(x.uid)}" style="min-height:30px;padding:4px 10px;flex:0 0 auto">✕</button>`:''}</div>`).join('');}
+function wireTutOpt(){document.querySelectorAll('.tutopt-cb').forEach(cb=>cb.onchange=()=>{ui.tutorial=cb.checked;lsSet('tf_tut',ui.tutorial?'1':'0');});}
 function wireCrew(){const c=crew();document.querySelectorAll('[data-crew]').forEach(el=>{const x=c[+el.dataset.crew];el.textContent=(x.bot?'🤖 ':'')+x.nick+(x.uid===MYID?' (you)':'');});
   document.querySelectorAll('[data-rmbot]').forEach(b=>b.onclick=()=>removeBot(b.dataset.rmbot));
   const ab=document.getElementById('addBot');if(ab)ab.onclick=()=>{ab.disabled=true;addBot();};}
@@ -1217,6 +1283,7 @@ function renderHome(){
       <label>Your color</label>${swatchRow('mycol',ui.myColor)}
       <div class="row" style="margin-top:6px"><button class="primary" id="watch4">🤖 Watch 4 computers</button><button class="primary" id="me3">🧑 Me vs 3 computers</button></div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--ink);font-size:14px"><input type="checkbox" id="blind" style="width:auto;min-height:0" ${ui.blind?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" class="tutopt-cb" style="width:auto;min-height:0" ${ui.tutorial?'checked':''}> <span>Show a quick rules overview before the game</span></label>
       <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" id="house" style="width:auto;min-height:0" ${ui.house?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label>
       <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" id="whirlH" style="width:auto;min-height:0" ${ui.whirl?'checked':''}> <span>House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</span></label>
       <details style="margin-top:12px"><summary>Custom players / pass &amp; play</summary>
@@ -1228,14 +1295,17 @@ function renderHome(){
     </div>
   </div>
   <div class="card"><div class="row"><span class="note" style="flex:3">Want to fine-tune the board? See every space numbered, with the serpent start spaces marked.</span><button id="map" style="flex:1">Numbered board</button></div></div>
+  <div class="card"><div class="row"><span class="note" style="flex:3">New to the game? A 2-minute illustrated walkthrough of the rules.</span><button id="tutHome" style="flex:1">📘 Quick rules</button></div></div>
   <div class="card">${RULES}</div>
   <div class="card"><details><summary>📖 Tile guide</summary>${guideHTML()}</details></div>`;
   document.getElementById('map').onclick=()=>{mode='map';render();};
+  document.getElementById('tutHome').onclick=()=>openTutorial(true);
   const np=document.getElementById('np'),names=document.getElementById('names');
   const drawNames=()=>{const n=+np.value;names.innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}</label><input class="pn" maxlength="16" value="${i?'Computer '+i:'You'}"><div class="row" style="margin-top:6px"><select class="pt" style="flex:1"><option value="h" ${i?'':'selected'}>Human</option><option value="ai" ${i?'selected':''}>Computer</option></select><select class="pc2" style="flex:1">${PALETTE.map((p,j)=>`<option value="${p.c}" ${(i===0?ui.myColor===p.c:assignColors([{color:ui.myColor},...Array(i).fill({})])[i]===p.c)?'selected':''}>● ${p.n}</option>`).join('')}</select></div>`).join('');
     names.querySelectorAll('.pc2').forEach(sel=>{const paint=()=>{sel.style.color=isDark(sel.value)?'#cbd5e1':sel.value;};paint();sel.onchange=paint;});};
   np.onchange=drawNames;drawNames();
   const bl=document.getElementById('blind');bl.onchange=()=>{ui.blind=bl.checked;};
+  wireTutOpt();
   const hr=document.getElementById('house');hr.onchange=()=>{ui.house=hr.checked;};
   const wh=document.getElementById('whirlH');wh.onchange=()=>{ui.whirl=wh.checked;};
   const BOTS=['Captain Reed','Admiral Vex','Skipper Moss','Navigator Ines'];
@@ -1289,6 +1359,7 @@ function renderLobby(){
       return `<label>Your color</label>${swatchRow('seatcol',cs[i],cs.filter((x,j)=>j!==i))}`;})()}
     <div class="players">${crewHTML(true)||'<p class="note">Waiting for players…</p>'}</div>
     ${net.seats.length+((net.meta&&net.meta.bots)||[]).length>4?'<p class="note">Only the first 4 players get a seat.</p>':''}
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" class="tutopt-cb" style="width:auto;min-height:0" ${ui.tutorial?'checked':''}> <span>Show a quick rules overview before the game</span></label>
     ${isHost&&crew().length<4?'<div class="actions"><button id="addBot">🤖 Add computer</button><span class="note" style="flex:2">Fill empty seats with computer players.</span></div>':''}
     <div class="actions">
       ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
@@ -1296,7 +1367,7 @@ function renderLobby(){
     </div>
     ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
   </div>`;
-  wireCrew();
+  wireCrew();wireTutOpt();
   if(tv){const st=document.getElementById('start');if(st)st.onclick=()=>{st.disabled=true;startOnline();};document.getElementById('leave').onclick=goHome;setTimeout(()=>{const b=document.getElementById('start');if(b&&!b.disabled)b.focus();},50);return;}
   document.getElementById('copy').onclick=()=>{navigator.clipboard?.writeText(net.code).then(()=>toast('Code copied'),()=>{});};
   document.getElementById('copyLink').onclick=()=>{const u=location.origin+location.pathname+'#g-'+net.code;
@@ -1417,6 +1488,7 @@ function renderGame(){
     <div class="row" style="flex:0 0 auto">
       <button class="small mob ${ui.info?'primary':'ghost'}" id="info">ℹ️ Info${(()=>{const h=(net.online?s.hands[me]:s.hands[s.turn])||[];return h.length?' · 🂠'+h.length:'';})()}</button>
       <button class="small ${ui.guide?'primary':'ghost'}" id="guideBtn">📖 Tiles</button>
+      <button class="small ghost" id="tutBtn">📘 Rules</button>
       ${canUndo()?`<button class="small ghost" id="undo">↩️ Undo</button>`:''}
       ${ui.view3d?'':`<button class="small ghost" id="nums">${ui.nums?'Hide #':'Show #'}</button>`}
       <button class="small ${ui.view3d?'primary':'ghost'}" id="v3d">${ui.view3d?'🗺️ 2D':'🧊 3D'}</button>
@@ -1463,6 +1535,7 @@ function renderGame(){
   on('cam',()=>B3.resetView());
   on('nums',()=>{ui.nums=!ui.nums;render();});
   on('guideBtn',()=>{ui.guide=!ui.guide;render();if(ui.guide)window.scrollTo({top:0,behavior:'smooth'});});
+  on('tutBtn',()=>openTutorial(true));
   on('guideClose',()=>{ui.guide=false;render();});
   on('skipPrompt',()=>{ui.skipPrompt=S.turnNo;render();});
   document.querySelectorAll('[data-tile]').forEach(el=>el.onclick=ev=>{if(ev.target.closest('button'))return;const i=+el.dataset.tile;ui.openTile=ui.openTile===i?null:i;render();});
@@ -1485,6 +1558,7 @@ function renderGame(){
   on('infoClose',()=>{ui.info=false;ui.guide=false;render();});
   document.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>{ui.sel=null;const fx=b.dataset.play;act(ns=>playTile(ns,fx));});
   checkFx();
+  maybeTutorial();
   scheduleAI();
 }
 /* ================= 3D view (self-contained WebGL, no libraries) ================= */
