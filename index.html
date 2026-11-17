@@ -360,11 +360,14 @@ function removable(s){
 }
 function whirl(s,k){
   const set=new Set([k,...NB[k]].filter(h=>isSea(s,h)));
-  const landHit=new Set(s.house&&s.house.whirlLand?[k,...NB[k]].filter(h=>isLand(s,h)):[]);
+  const landHit=new Set(s.house&&s.house.whirlLand?NB[k].filter(h=>isLand(s,h)):[]);
   let lost=0;for(const e of onBoard(s)){const h=posOf(s,e);if(set.has(h)||landHit.has(h)){e.st='dead';e.hex=h;e.boat=null;lost++;}}
   const nb=s.boats.filter(b=>set.has(b.hex)).length,nc=s.creatures.filter(c=>set.has(c.hex)).length;
   s.boats=s.boats.filter(b=>!set.has(b.hex));s.creatures=s.creatures.filter(c=>!set.has(c.hex));
-  log(s,`🌀 The whirlpool swallowed ${plural(lost,'explorer')}, ${plural(nb,'boat')} and ${plural(nc,'creature')}.`);
+  // house rule: the land tiles touching the whirlpool sink too, unrevealed (except the volcano, which erupts)
+  let volcano=false;for(const h of landHit){if(s.land[h].fx==='volcano')volcano=true;delete s.land[h];}
+  log(s,`🌀 The whirlpool swallowed ${plural(lost,'explorer')}, ${plural(nb,'boat')} and ${plural(nc,'creature')}${landHit.size?` and pulled ${plural(landHit.size,'land tile')} under`:''}.`);
+  return volcano;
 }
 function removeTile(s,k){
   const t=s.land[k];delete s.land[k];
@@ -382,7 +385,7 @@ function removeTile(s,k){
         here.sort((a,c)=>(a.o===s.turn?0:1)-(c.o===s.turn?0:1)).slice(0,3).forEach(e=>e.boat=b.id);}
       else log(s,'No boats are left in the supply.');
       break;
-    case 'whirlpool':whirl(s,k);break;
+    case 'whirlpool':if(whirl(s,k)){endGame(s,'🌋 The whirlpool dragged the volcano under and it erupted!');return;}break;
     case 'volcano':endGame(s,'🌋 The volcano erupted!');return;
     default:s.hands[s.turn].push(t.fx);
   }
@@ -521,7 +524,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v30-firebase';
+const BUILD='v31-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -732,6 +735,12 @@ function attackText(s,a){
   if(a.kind==='shark')return `A shark ate ${n} of ${who}'s swimmer${n>1?'s':''}!`;
   return `The sea serpent swallowed ${n} of ${who}'s swimmer${n>1?'s':''}!`;
 }
+function volcanoAfterWhirl(prev,s){
+  if(!prev||!s||s.phase!=='ended'||prev.phase==='ended'||!s.reveal||s.reveal.fx!=='whirlpool')return null;
+  const left=s.explorers.filter(e=>e.st==='on');
+  return{kind:'volcano',variant:0,hex:s.reveal.hex,victims:left.map(e=>({o:e.o,dead:true})),title:ATTACK_TITLES.volcano[0],
+    sub:`The whirlpool dragged the volcano under and it erupted! ${plural(left.length,'explorer')} ${left.length===1?'was':'were'} still on the island or at sea. Game over.`};
+}
 function tileEvent(prev,s){
   if(!s||!s.reveal||!['whirlpool','volcano'].includes(s.reveal.fx))return null;
   const kind=s.reveal.fx,a={kind,variant:0,hex:s.reveal.hex,victims:[],title:ATTACK_TITLES[kind][0]};
@@ -788,7 +797,7 @@ function checkFx(){
   if(!S)return;
   const pv=ui.prevState;ui.prevState=S;
   if(ui.view3d&&B3.ok){ui.seenRoll=S.rollNo||0;ui.seenReveal=S.revealNo||0;return;}
-  if(ui.seenRoll!==undefined){for(const a of attacksBetween(pv,S))queueFx(fxAttack2D(a));if(pv&&(S.revealNo||0)>(pv.revealNo||0)){const te=tileEvent(pv,S);if(te)queueFx(fxAttack2D(te));}}
+  if(ui.seenRoll!==undefined){for(const a of attacksBetween(pv,S))queueFx(fxAttack2D(a));if(pv&&(S.revealNo||0)>(pv.revealNo||0)){const te=tileEvent(pv,S);if(te)queueFx(fxAttack2D(te));const ve=volcanoAfterWhirl(pv,S);if(ve)queueFx(fxAttack2D(ve));}}
   if(ui.seenRoll===undefined){ui.seenRoll=S.rollNo||0;ui.seenReveal=S.revealNo||0;return;}
   if((S.revealNo||0)>ui.seenReveal&&S.reveal){ui.seenReveal=S.revealNo;queueFx(fxReveal(S.reveal,S.players[S.reveal.by].name));}
   if((S.rollNo||0)>ui.seenRoll&&S.lastRoll){ui.seenRoll=S.rollNo;queueFx(fxRoll(S.lastRoll,S.players[S.lastRoll.by].name));}
@@ -1048,7 +1057,7 @@ A whale or sea serpent sharing a space with a boat that has anyone in it attacks
 <b>Start of your turn:</b> 🐬 dolphin (a swimmer moves 3 spaces), 💨 winds (a boat you control moves 3 spaces), or move any shark, whale or serpent to an empty sea space.<br>
 <b>Defense:</b> 🛡️ shark or whale defense. These are used automatically when another player attacks you with that creature.</p>
 <h4>Optional house rule</h4><p>If a whale tips a boat over in a space where a shark or sea serpent is waiting, the people who fall in are eaten at once.</p>
-<p><b>Land-sweeping whirlpools</b> (optional): a whirlpool also kills every explorer standing on the land tiles next to it. The tiles themselves stay.</p>
+<p><b>Land-sinking whirlpools</b> (optional): a whirlpool also sinks every land tile touching it, and everyone standing on them is lost. Those tiles vanish without their hidden effects, except the volcano: if the whirlpool drags it under, it erupts and the game ends.</p>
 <p>If you turn it on before starting, whales and sea serpents also smash <b>empty</b> boats, and nobody can sail an empty boat into a whale or serpent space.</p>
 <h4>Kept tiles are secret</h4><p>When someone sinks a tile they get to keep, everyone else only sees that they kept something. Its identity is revealed when it's played.</p>
 <h4>End</h4><p>The game ends the moment the 🌋 volcano tile is sunk. Everyone still on the island or at sea is lost. Reveal the values of your rescued explorers. The highest total wins.</p></div></details>`;
@@ -1076,7 +1085,7 @@ function renderHome(){
       <div class="row" style="margin-top:6px"><button class="primary" id="watch4">🤖 Watch 4 computers</button><button class="primary" id="me3">🧑 Me vs 3 computers</button></div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--ink);font-size:14px"><input type="checkbox" id="blind" style="width:auto;min-height:0" ${ui.blind?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label>
       <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" id="house" style="width:auto;min-height:0" ${ui.house?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" id="whirlH" style="width:auto;min-height:0" ${ui.whirl?'checked':''}> <span>House rule: whirlpools also sweep away explorers on the <b>land</b> next to them</span></label>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" id="whirlH" style="width:auto;min-height:0" ${ui.whirl?'checked':''}> <span>House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</span></label>
       <details style="margin-top:12px"><summary>Custom players / pass &amp; play</summary>
       <label for="np">Players</label>
       <select id="np"><option>2</option><option selected>3</option><option>4</option></select>
@@ -1128,7 +1137,7 @@ function renderLobby(){
     <div class="players">${(()=>{const cs=assignColors(net.seats.slice(0,4));return net.seats.slice(0,4).map((x,i)=>`<div class="pl"><span class="sw" style="background:${cs[i]}"></span><span class="nm"></span>${x.uid===net.meta?.host?'<span class="st">host</span>':''}</div>`).join('')||'<p class="note">Waiting for players…</p>';})()}</div>
     ${net.seats.length>4?'<p class="note">Only the first 4 players get a seat.</p>':''}
     <div class="actions">
-      ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sweep away explorers on the <b>land</b> next to them</label><button class="primary" id="start" ${net.seats.length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
+      ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><button class="primary" id="start" ${net.seats.length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
       <button class="ghost" id="leave">Leave</button>
     </div>
     ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
@@ -2100,7 +2109,7 @@ function diff(prev,s){
   // dice
   if((s.rollNo||0)>seenRoll&&s.lastRoll){seenRoll=s.rollNo;const r=s.lastRoll;const th=r.throw||randomThrow('r'+s.rollNo+(s.gid||''));
     const go=()=>playDie(th,r.face,s.players[r.by].name,r.none);if(revealNew)setTimeout(go,1900);else go();}
-  if(revealNew){const te=tileEvent(prev,s);if(te)queueCine(te,tileDelay+250);}
+  if(revealNew){const te=tileEvent(prev,s);if(te)queueCine(te,tileDelay+250);const ve=volcanoAfterWhirl(prev,s);if(ve)queueCine(ve,tileDelay+400);}
   if(revealNew)seenReveal=s.revealNo;
 }
 function updateRings(s){
