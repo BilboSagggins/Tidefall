@@ -118,6 +118,12 @@ body.tv .cap3d{font-size:20px}
 #padhint{position:fixed;z-index:45;left:50%;bottom:8px;transform:translateX(-50%);display:none;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;background:rgba(4,20,32,.88);border:1px solid #ffffff22;border-radius:999px;padding:5px 14px;font-size:12px;color:#cbd5e1;pointer-events:none}
 #padhint b{color:#fde047}#padhint span{opacity:.4}
 body.padui :focus{outline:3px solid #fde047!important;outline-offset:2px;box-shadow:0 0 12px #fde04799}
+.tut3d{position:relative;height:clamp(200px,38vh,340px);border-radius:14px;overflow:hidden;background:#0b3550}
+.tut3d canvas{display:block;width:100%;height:100%;touch-action:none}
+.tutcap{position:absolute;left:8px;right:8px;bottom:8px;z-index:5;background:rgba(4,20,30,.86);border:1px solid #ffffff22;border-radius:10px;padding:6px 10px;font-size:14px;text-align:center;line-height:1.35;pointer-events:none}
+.tutcap:empty{display:none}.tutcap.pop{animation:fxIn .25s ease-out}
+.tut3d .cap3d{font-size:12px;padding:5px 10px;top:6px}
+body.tv .tut3d{height:52vh}body.tv .tutcap{font-size:22px}
 .tutor{position:fixed;inset:0;z-index:60;background:rgba(2,12,20,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:12px;animation:fxIn .2s ease-out}
 .tutbox{width:min(560px,100%);max-height:96vh;overflow:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--accent);border-radius:18px;padding:14px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .tuthead{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
@@ -567,7 +573,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v36-firebase';
+const BUILD='v37-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -905,20 +911,20 @@ const tSvg=inner=>`<svg viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg"
 const SEA='#2a77a6',BEACH='#e6d29c',FOREST='#3f7d4a',MOUNT='#857565';
 function tutSlides(){
   const sl=[
-  {t:'Escape the sinking isle',b:'Get your explorers off the sinking island and onto the four <b>safe islands</b> in the corners. Each explorer has a secret value from <b>1 to 6</b>. When the game ends, add up the values of the explorers you saved. The highest total wins.',
+  {t:'Escape the sinking isle',d:'escape',b:'Get your explorers off the sinking island and onto the four <b>safe islands</b> in the corners. Each explorer has a secret value from <b>1 to 6</b>. When the game ends, add up the values of the explorers you saved. The highest total wins.',
    v:tSvg(tHex(70,85,30,BEACH)+tHex(115,60,30,FOREST)+tHex(115,110,30,MOUNT)+tDot(70,85,'#ef4444',5)+tDot(115,60,'#facc15')+tDot(115,110,'#ef4444',2)+tArrow(150,85,220,85)+tIsle(260,85)+tDot(248,70,'#ef4444',6)+tDot(272,70,'#ef4444',3)+tLbl(250,130,'Saved: 6 + 3 = 9 points','#fde68a',11))},
-  {t:'Setting up',b:'Players take turns putting one explorer at a time on any <b>empty land tile</b> until everyone is ashore. Then each player places <b>2 boats</b> on the water next to the island. Five <b>sea serpents</b> start out: one in the lagoon in the middle, and one beside each safe island.',
+  {t:'Setting up',d:'setup',b:'Players take turns putting one explorer at a time on any <b>empty land tile</b> until everyone is ashore. Then each player places <b>2 boats</b> on the water next to the island. Five <b>sea serpents</b> start out: one in the lagoon in the middle, and one beside each safe island.',
    v:tSvg(tHex(60,60,26,BEACH)+tHex(105,85,26,FOREST)+tHex(60,110,26,MOUNT)+tDot(60,60,'#ef4444')+tDot(105,85,'#facc15')+tDot(60,110,'#a78bfa')+tBoat(160,60)+tBoat(160,115)+tLbl(160,40,'boats')+`<image href="${dieArtURL('serpent')}" x="215" y="45" width="80" height="80"/>`+tLbl(255,145,'serpents start out'))},
-  {t:'Your turn, in 4 steps',b:'<b>1.</b> Play one kept tile, if you want to.<br><b>2.</b> Move, using up to <b>3 steps</b>.<br><b>3.</b> Sink one land tile.<br><b>4.</b> Roll the creature die and move a creature.',
+  {t:'Your turn, in 4 steps',d:'turn',b:'<b>1.</b> Play one kept tile, if you want to.<br><b>2.</b> Move, using up to <b>3 steps</b>.<br><b>3.</b> Sink one land tile.<br><b>4.</b> Roll the creature die and move a creature.',
    v:tSvg([['🂠','Play a tile'],['👣','Move 3'],['🌊','Sink a tile'],['🎲','Roll']].map(([ic,l],i)=>{const x=42+i*79;return `<circle cx="${x}" cy="72" r="30" fill="#0c3044" stroke="#fbbf24" stroke-width="3"/><text x="${x}" y="82" font-size="26" text-anchor="middle">${ic}</text>`+tLbl(x,32,String(i+1),'#fbbf24',16)+tLbl(x,128,l)+(i<3?tArrow(x+33,72,x+45,72):'');}).join(''))},
-  {t:'Moving',b:'Explorers walk across land and can step into a boat next to them. In the water they become <b>swimmers</b> and move only <b>1 space per turn</b>. A boat holds <b>3</b> and carries everyone aboard; whoever has the most people in it steers. Step onto a safe island to rescue an explorer. Explorers can never climb back onto land.',
+  {t:'Moving',d:'move',b:'Explorers walk across land and can step into a boat next to them. In the water they become <b>swimmers</b> and move only <b>1 space per turn</b>. A boat holds <b>3</b> and carries everyone aboard; whoever has the most people in it steers. Step onto a safe island to rescue an explorer. Explorers can never climb back onto land.',
    v:tSvg(tHex(45,85,28,FOREST)+tDot(45,85,'#ef4444')+tArrow(70,85,96,85)+tHex(125,85,28,SEA)+tBoat(125,88)+tDot(113,82,'#ef4444')+tDot(125,82,'#ef4444')+tDot(137,82,'#facc15')+tArrow(156,85,196,85)+tIsle(240,85)+tLbl(125,135,'red steers (2 vs 1)')+tLbl(45,135,'walk in')+tLbl(240,135,'rescued!','#86efac'))},
-  {t:'Sinking the island',b:'Each turn you sink one land tile that touches the water: <b>beaches first</b>, then forests, then mountains. Anyone standing on it becomes a swimmer. Then flip it over. A <span style="color:#86efac">green</span> tile happens right away; a <span style="color:#fca5a5">red</span> tile is yours to keep and use later.',
+  {t:'Sinking the island',d:'sink',b:'Each turn you sink one land tile that touches the water: <b>beaches first</b>, then forests, then mountains. Anyone standing on it becomes a swimmer. Then flip it over. A <span style="color:#86efac">green</span> tile happens right away; a <span style="color:#fca5a5">red</span> tile is yours to keep and use later.',
    v:tSvg(tHex(45,70,26,BEACH)+tLbl(45,115,'1st')+tHex(110,70,26,FOREST)+tLbl(110,115,'2nd')+tHex(175,70,26,MOUNT)+tLbl(175,115,'3rd')+tArrow(70,70,82,70,'#e8f1f5')+tArrow(135,70,147,70,'#e8f1f5')+
      tHex(240,55,22,'#0f2d40','#16a34a')+`<text x="240" y="62" font-size="18" text-anchor="middle">🦈</text>`+tLbl(240,92,'now','#86efac')+tHex(290,55,22,'#0f2d40','#dc2626')+`<text x="290" y="62" font-size="18" text-anchor="middle">🐬</text>`+tLbl(290,92,'keep','#fca5a5')+tLbl(265,135,'flip it over'))},
-  {t:'Sea creatures',b:'The die picks which creature you move.<br><b>Shark</b> (up to 2 spaces): eats swimmers.<br><b>Whale</b> (up to 3): smashes boats with people in them, tipping everyone into the sea.<br><b>Sea serpent</b> (1 space): eats swimmers and drags whole boats under.<br>Swimmers can’t enter shark or serpent spaces, and boats with people can’t enter whale or serpent spaces.',
+  {t:'Sea creatures',d:'creatures',b:'The die picks which creature you move.<br><b>Shark</b> (up to 2 spaces): eats swimmers.<br><b>Whale</b> (up to 3): smashes boats with people in them, tipping everyone into the sea.<br><b>Sea serpent</b> (1 space): eats swimmers and drags whole boats under.<br>Swimmers can’t enter shark or serpent spaces, and boats with people can’t enter whale or serpent spaces.',
    v:`<div class="tutcr">${[['shark','Shark','2 spaces · eats swimmers'],['whale','Whale','3 spaces · smashes boats'],['serpent','Sea serpent','1 space · both']].map(([k,n,d])=>`<div><img src="${dieArtURL(k)}" alt=""><b>${n}</b><span>${d}</span></div>`).join('')}</div>`},
-  {t:'Whirlpools and the volcano',b:'A <b>whirlpool</b> swallows everything at sea in its space and every space touching it: swimmers, boats, even creatures. The <b>volcano</b> hides under one mountain tile. When it’s sunk the game ends at once, and anyone not on a safe island is lost. Don’t wait too long!',
+  {t:'Whirlpools and the volcano',d:'whirl',b:'A <b>whirlpool</b> swallows everything at sea in its space and every space touching it: swimmers, boats, even creatures. The <b>volcano</b> hides under one mountain tile. When it’s sunk the game ends at once, and anyone not on a safe island is lost. Don’t wait too long!',
    v:`<div class="tutcr tut2">${[['whirlpool','Whirlpool','clears everything around it'],['volcano','Volcano','ends the game']].map(([k,n,d])=>`<div><img src="${dieArtURL(k)}" alt=""><b>${n}</b><span>${d}</span></div>`).join('')}</div>`}];
   const h=S&&S.house||{},extra=[];
   if(S&&S.blind)extra.push('<b>Hidden values:</b> nobody sees explorer values, not even their own, until the end.');
@@ -929,13 +935,15 @@ function tutSlides(){
 }
 function openTutorial(force){if(document.getElementById('tutor'))return;ui.tutOpen=true;ui.tutStep=0;
   const el=document.createElement('div');el.id='tutor';el.className='tutor';document.body.appendChild(el);drawTutorial(force);}
-function closeTutorial(){const el=document.getElementById('tutor');if(el)el.remove();ui.tutOpen=false;if(S&&S.gid)ui.tutDone[S.gid]=1;render();}
+function tut3dOK(){try{return B3.supported();}catch{return false;}}
+function closeTutorial(){demoHalt();B3.demoStop();const el=document.getElementById('tutor');if(el)el.remove();ui.tutOpen=false;if(S&&S.gid)ui.tutDone[S.gid]=1;render();}
 function drawTutorial(force){const el=document.getElementById('tutor');if(!el)return;const sl=tutSlides(),i=ui.tutStep,s=sl[i],last=i===sl.length-1;
   el.innerHTML=`<div class="tutbox"><div class="tuthead"><span>Quick rules · ${i+1} of ${sl.length}</span><button class="small ghost" id="tutSkip">${S&&mode==='game'&&!force?'Skip':'Close'}</button></div>
-    <h2>${s.t}</h2><div class="tutvis">${s.v}</div><p class="tuttext">${s.b}</p>
+    <h2>${s.t}</h2>${s.d&&tut3dOK()?'<div class="tutvis tut3d" id="tut3d"><div class="tutcap"></div></div>':`<div class="tutvis">${s.v}</div>`}<p class="tuttext">${s.b}</p>
     <div class="tutdots">${sl.map((_,j)=>`<span class="${j===i?'on':''}"></span>`).join('')}</div>
     <div class="tutnav"><button class="ghost" id="tutBack" ${i?'':'disabled'}>← Back</button><button class="primary" id="tutNext">${last?(S&&mode==='game'&&!force?'Start playing':'Done'):'Next →'}</button></div>
     <label class="tutopt"><input type="checkbox" id="tutPref" ${ui.tutorial?'checked':''}> Show this before every game</label></div>`;
+  const h3=el.querySelector('#tut3d');if(h3){if(!playDemo(h3,s.d)){h3.outerHTML=`<div class="tutvis">${s.v}</div>`;}}else demoHalt();
   el.querySelector('#tutSkip').onclick=closeTutorial;
   el.querySelector('#tutBack').onclick=()=>{ui.tutStep=Math.max(0,i-1);drawTutorial(force);};
   el.querySelector('#tutNext').onclick=()=>{if(last)closeTutorial();else{ui.tutStep=i+1;drawTutorial(force);}};
@@ -944,6 +952,110 @@ function drawTutorial(force){const el=document.getElementById('tutor');if(!el)re
 }
 function maybeTutorial(){if(!ui.tutorial||!S||!S.gid||ui.tutDone[S.gid]||ui.tutOpen||S.phase==='ended'||S.turnNo>1)return;openTutorial(false);}
 
+/* ---------- 3D rules examples: small looping scenes played with the real 3D board ---------- */
+const TDEMO={timers:[],run:null,loop:0};
+function demoHalt(){TDEMO.timers.forEach(clearTimeout);TDEMO.timers=[];TDEMO.run=null;}
+const DCOL=['#ef4444','#facc15','#a78bfa','#f8fafc'];
+function dLand(){const land={};const isL=new Set(ATLANTIS);
+  const beach=new Set(ATLANTIS.filter(k=>NB[k].some(n=>!isL.has(n)&&n!==CENTER)));
+  const forest=new Set(ATLANTIS.filter(k=>!beach.has(k)&&NB[k].some(n=>beach.has(n))));
+  for(const k of ATLANTIS)land[k]={elev:beach.has(k)?'beach':forest.has(k)?'forest':'mountain',fx:'shark'};return land;}
+function dBase(){return{gid:'tut',v:1,players:DCOL.map((c,i)=>({name:['Red','Yellow','Purple','White'][i],color:c})),land:dLand(),explorers:[],boats:[],creatures:[],
+  hands:[[],[],[],[]],turn:0,turnNo:1,phase:'move',moves:3,pending:null,lastRoll:null,reveal:null,rollNo:0,revealNo:0,house:{},blind:false,log:[],hl:null};}
+let dN=0;
+const dEx=(s,o,hex,extra)=>{const e={id:'de'+(++dN),o,val:extra&&extra.val||3,st:'on',hex,boat:null,swam:-1,...(extra||{})};s.explorers.push(e);return e.id;};
+const dBoat=(s,hex)=>{const id='db'+(++dN);s.boats.push({id,hex});return id;};
+const dCr=(s,kind,hex)=>{const id='dc'+(++dN);s.creatures.push({id,kind,hex});return id;};
+const dE=(s,id)=>s.explorers.find(e=>e.id===id);
+const dSea=(s,k)=>!s.land[k]&&!ISLES.includes(k)&&ALL.includes(k);
+// shortest path between two spaces through the spaces ok() allows
+function dPath(from,to,ok){const prev={[from]:null},q=[from];while(q.length){const k=q.shift();if(k===to)break;for(const n of NB[k]||[]){if(n in prev||(!ok(n)&&n!==to))continue;prev[n]=k;q.push(n);}}
+  if(!(to in prev))return[from];const p=[];for(let k=to;k!=null;k=prev[k])p.unshift(k);return p;}
+function dCam(keys,dist,pitch){let x=0,z=0;for(const k of keys){const w=B3.hexW(k);x+=w[0];z+=w[1];}x/=keys.length;z/=keys.length;
+  return{tx:x,tz:z+.4,dist:dist||9,pitch:pitch||.95,yaw:0};}
+// The scenes. Each has a starting state, camera, and timed steps [wait ms, change, caption].
+function dScenes(){const L=dLand(),land=k=>!!L[k],sea=k=>!L[k]&&!ISLES.includes(k)&&ALL.includes(k);
+  const coastOf=k=>NB[k].filter(sea);
+  const near=(from,list)=>list.slice().sort((a,b)=>dPath(from,a,()=>true).length-dPath(from,b,()=>true).length)[0];
+  const beaches=ATLANTIS.filter(k=>L[k].elev==='beach'),forests=ATLANTIS.filter(k=>L[k].elev==='forest'),mounts=ATLANTIS.filter(k=>L[k].elev==='mountain');
+  const SC={};
+  // 1. escape to a safe island
+  {const isle='I0',dock=ISLE_ADJ[isle][0];const start=near(dock,beaches);const route=dPath(start,dock,sea);
+    SC.escape={cam:dCam([start,dock,isle],9.2),build(){const s=dBase();const r=dEx(s,0,start,{val:5,showVal:true});dEx(s,1,isle,{st:'safe',val:3,showVal:true});
+      dEx(s,2,near(start,forests),{});dEx(s,3,NB[start].find(land)||start,{});const b=dBoat(s,route[1]);return{s,r,b};},
+      steps:c=>[[500,null,'Red explorer (worth <b>5</b>) needs to escape'],
+        [1100,s=>{const e=dE(s,c.r);e.boat=c.b;e.hex=route[1];},'Step into a boat'],
+        ...route.slice(2).map((k,i)=>[750,s=>{s.boats[0].hex=k;dE(s,c.r).hex=k;},i?null:'Sail toward a safe island']),
+        [900,s=>{const e=dE(s,c.r);e.boat=null;e.st='safe';e.hex=isle;},'Safe! Those <b>5 points</b> count at the end']]};}
+  // 2. setting up
+  {const spots=ATLANTIS.filter((k,i)=>i%5===2).slice(0,8);const cs=[...new Set(beaches.flatMap(coastOf))];const bspots=[0,.27,.52,.77].map(f=>cs[Math.floor(f*cs.length)]);
+    SC.setup={cam:dCam(ATLANTIS,15.5,1.05),build(){const s=dBase();s.phase='setupE';const ids=spots.map((k,i)=>dEx(s,i%4,k,{st:'res'}));return{s,ids};},
+      steps:c=>[[500,null,'Take turns placing one explorer on an <b>empty land tile</b>'],
+        ...c.ids.map(id=>[480,s=>{const e=dE(s,id);e.st='on';}]),
+        [700,s=>{s.phase='setupB';},'Then everyone places <b>2 boats</b> in the water next to the island'],
+        ...bspots.map(k=>[600,s=>{dBoat(s,k);}])]};}
+  // 3. a turn in 4 steps
+  {const end=beaches[Math.floor(beaches.length/2)];const nbF=NB[end].filter(k=>land(k)&&L[k].elev!=='beach');
+    const mid=nbF[0]||NB[end].find(land);const st0=NB[mid].find(k=>land(k)&&k!==end&&!NB[end].includes(k))||NB[mid].find(land);
+    const path=[st0,mid,end];const sinkT=beaches.find(k=>k!==end&&!path.includes(k)&&NB[end].includes(k))||beaches.find(k=>!path.includes(k));
+    const sharkTo=dPath(sinkT,coastOf(sinkT)[0]||sinkT,sea);
+    SC.turn={cam:dCam([st0,end,sinkT],12.5),build(){const s=dBase();const r=dEx(s,0,st0,{});dEx(s,1,near(sinkT,forests),{});return{s,r};},
+      steps:c=>[[600,null,'<b>1.</b> Play a kept tile (if you have one)'],
+        [1500,s=>{s.hl=[path[0]];},'<b>2.</b> Move up to <b>3 steps</b>'],
+        [700,s=>{dE(s,c.r).hex=path[1];s.hl=path.slice(0,2);}],[700,s=>{dE(s,c.r).hex=path[2];s.hl=path.slice(0,3);}],
+        [1100,s=>{s.hl=null;delete s.land[sinkT];s.reveal={hex:sinkT,fx:'shark',by:0};s.revealNo=1;dCr(s,'shark',sinkT);},'<b>3.</b> Sink one land tile and flip it'],
+        [3200,s=>{s.rollNo=1;s.lastRoll={face:'shark',by:0,none:false};},'<b>4.</b> Roll the creature die'],
+        [3300,s=>{s.creatures[0].hex=sharkTo[sharkTo.length-1];},'…then move that creature']]};}
+  // 4. moving: walk, board, sail, jump, swim
+  {const lb=beaches[Math.floor(beaches.length*.75)];const sb=coastOf(lb)[0];const inland=NB[lb].find(k=>land(k)&&L[k].elev!=='beach')||NB[lb].find(land);
+    const far=ALL.filter(sea).filter(k=>dPath(sb,k,sea).length===4&&!NB[k].some(land))[0]||sb;const route=dPath(sb,far,sea);const swimTo=NB[far].find(k=>sea(k)&&!route.includes(k))||far;
+    SC.move={cam:dCam([inland,far],10),build(){const s=dBase();const r=dEx(s,0,inland,{});const b=dBoat(s,sb);dEx(s,1,sb,{boat:b});return{s,r,b};},
+      steps:c=>[[600,null,'Explorers walk across land…'],
+        [900,s=>{dE(s,c.r).hex=lb;}],
+        [1000,s=>{const e=dE(s,c.r);e.hex=sb;e.boat=c.b;},'…and step into a boat (it holds 3)'],
+        ...route.slice(1).map((k,i)=>[700,s=>{s.boats[0].hex=k;s.explorers.forEach(e=>{if(e.boat)e.hex=k;});},i?null:'A boat moves up to 3 spaces, carrying everyone']),
+        [1300,s=>{const e=dE(s,c.r);e.boat=null;e.hex=far;},'Jump overboard and you are a <b>swimmer</b>'],
+        [1300,s=>{dE(s,c.r).hex=swimTo;},'Swimmers move just <b>1 space</b>']]};}
+  // 5. sinking
+  {const t1=beaches[1],t2=beaches[Math.floor(beaches.length*.4)];
+    SC.sink={cam:dCam([t1,t2],11),build(){const s=dBase();const p=dEx(s,2,t1,{});dEx(s,0,NB[t1].find(k=>land(k)&&k!==t2)||t2,{});return{s,p};},
+      steps:c=>[[600,null,'<b>Beaches sink first</b>, then forests, then mountains'],
+        [1200,s=>{delete s.land[t1];s.reveal={hex:t1,fx:'whale',by:0};s.revealNo=1;dCr(s,'whale',t1);},'Anyone on a sunk tile becomes a swimmer'],
+        [3300,null,'Green tiles happen right away: here, a whale appears'],
+        [1800,s=>{delete s.land[t2];s.reveal={hex:t2,fx:'dolphin',by:0};s.revealNo=2;s.hands[0].push('dolphin');},'Red tiles are kept to play on a later turn']]};}
+  // 6. sea creatures attack
+  {const open=ALL.filter(sea).filter(k=>!NB[k].some(land)&&k!==CENTER&&!SERPENT_START.includes(k));
+    const right=open.filter(k=>parse(k)[0]>=8&&parse(k)[0]<=11).sort((a,b)=>parse(a)[1]-parse(b)[1]);
+    const a1=right[Math.floor(right.length*.3)],a2=right[Math.floor(right.length*.6)];
+    const sh=NB[a1].map(n=>NB[n].find(m=>sea(m)&&dPath(a1,m,sea).length===3)).find(Boolean)||NB[a1].find(sea);
+    const wh=ALL.filter(sea).find(k=>dPath(a2,k,sea).length===4)||NB[a2].find(sea);
+    const sp=NB[a2].find(k=>sea(k)&&k!==wh&&!NB[a1].includes(k));const a3=NB[sp].find(k=>sea(k)&&k!==a2&&k!==wh&&!NB[a2].includes(k))||NB[sp].find(sea);
+    SC.creatures={cam:dCam([a1,a2,a3],11),build(){const s=dBase();const r=dEx(s,0,a1,{});const b=dBoat(s,a2);dEx(s,1,a2,{boat:b});dEx(s,2,a2,{boat:b});const w=dEx(s,3,a3,{});
+      const csh=dCr(s,'shark',sh),cwh=dCr(s,'whale',wh),csp=dCr(s,'serpent',sp);return{s,r,b,w,csh,cwh,csp};},
+      steps:c=>[[700,null,'The die picks which creature moves'],
+        [900,s=>{s.creatures.find(x=>x.id===c.csh).hex=a1;dE(s,c.r).st='dead';},'<b>Shark</b> (2 spaces) eats swimmers'],
+        [5200,s=>{s.creatures.find(x=>x.id===c.cwh).hex=a2;s.boats=[];s.explorers.forEach(e=>{if(e.boat){e.boat=null;e.hex=a2;}});},'<b>Whale</b> (3 spaces) smashes boats with people in them'],
+        [5200,s=>{s.creatures.find(x=>x.id===c.csp).hex=a3;dE(s,c.w).st='dead';},'<b>Sea serpent</b> (1 space) does both']],tail:4600};}
+  // 7. whirlpool and volcano
+  {const nbB=k=>NB[k].filter(n=>L[n]&&L[n].elev==='beach');const tw=forests.slice().sort((a,b)=>nbB(b).length-nbB(a).length)[0];const ss=nbB(tw).slice(0,3);
+    const tv=mounts.filter(k=>!NB[tw].includes(k)).sort((a,b)=>dPath(tw,a,()=>true).length-dPath(tw,b,()=>true).length)[0]||mounts[0];
+    SC.whirl={cam:dCam([tw,...ss,tv],10.5),build(){const s=dBase();ss.forEach(k=>delete s.land[k]);const b=dBoat(s,ss[0]);dEx(s,0,ss[0],{boat:b});dEx(s,1,ss[0],{boat:b});
+      if(ss[1])dEx(s,2,ss[1],{});if(ss[2])dCr(s,'shark',ss[2]);dEx(s,3,tv,{});return{s};},
+      steps:c=>[[700,null,'A <b>whirlpool</b> swallows everything at sea around it'],
+        [1100,s=>{delete s.land[tw];s.reveal={hex:tw,fx:'whirlpool',by:0};s.revealNo=1;const zone=new Set([tw,...NB[tw]]);
+          s.explorers.forEach(e=>{if(e.st==='on'&&zone.has(posOf(s,e))&&!s.land[posOf(s,e)]){e.st='dead';e.boat=null;}});s.boats=s.boats.filter(b=>!zone.has(b.hex));s.creatures=s.creatures.filter(x=>!zone.has(x.hex));
+          s.log.push('🌀 The whirlpool swallowed a boat, its crew, a swimmer and a shark.');}],
+        [6600,s=>{delete s.land[tv];s.reveal={hex:tv,fx:'volcano',by:0};s.revealNo=2;s.phase='ended';},'Flip the <b>volcano</b> and the game ends at once']],tail:6500};}
+  return SC;}
+let DSC=null;
+function playDemo(host,name){demoHalt();if(!B3.supported()||!B3.demoStart(host))return false;DSC=DSC||dScenes();const sc=DSC[name];if(!sc)return false;
+  const run={};TDEMO.run=run;const capEl=host.querySelector('.tutcap');
+  const setCap=h=>{if(capEl&&h!=null){capEl.innerHTML=h;capEl.classList.remove('pop');void capEl.offsetWidth;capEl.classList.add('pop');}};
+  const play=()=>{if(TDEMO.run!==run)return;TDEMO.loop++;dN=0;const c=sc.build();let s=c.s;s.gid='tut'+TDEMO.loop;B3.demoSync(s,sc.cam);
+    let t=0;for(const[dt,fn,txt]of sc.steps(c)){t+=dt;TDEMO.timers.push(setTimeout(()=>{if(TDEMO.run!==run)return;
+      if(fn){const ns=JSON.parse(JSON.stringify(s));ns.v=s.v+1;fn(ns);if(ns.reveal&&!ns.reveal.elev&&s.land[ns.reveal.hex])ns.reveal.elev=s.land[ns.reveal.hex].elev;s=ns;B3.demoSync(ns);}setCap(txt);},t));}
+    TDEMO.timers.push(setTimeout(play,t+(sc.tail||2600)));};
+  play();return true;}
 /* ---------- dice + tile animations ---------- */
 const FXQ=[];let fxBusyUntil=0,fxRunning=false;
 const ELEV_COL={beach:'#e6d29c',forest:'#3f7d4a',mountain:'#857565'};
@@ -1573,8 +1685,10 @@ function renderGame(){
 const PAD=(()=>{
   try{navigator.gamepadInputEmulation='gamepad';}catch{}
   let active=false,uiMode=false,autoUI=false,hex=null,lastSig='',prevBtn=[],stickT=0,stickDir=null,rafOn=false,lastFocusSel=null;
-  const st={get active(){return active;},get uiMode(){return uiMode;},get hex(){return hex;}};
+  const st={get style(){return L.name;},get active(){return active;},get uiMode(){return uiMode;},get hex(){return hex;}};
   const BTN={A:0,B:1,X:2,Y:3,LB:4,RB:5,LT:6,RT:7,VIEW:8,MENU:9,RS:11,UP:12,DOWN:13,LEFT:14,RIGHT:15};
+  const LBLS={xbox:{A:'Ⓐ',B:'Ⓑ',X:'Ⓧ',Y:'Ⓨ',LB:'LB',RB:'RB',MENU:'☰',name:'Xbox'},ps:{A:'✕',B:'○',X:'□',Y:'△',LB:'L1',RB:'R1',MENU:'OPTIONS',name:'PlayStation'}};
+  let L=LBLS.xbox;const styleOf=id=>/054c|playstation|dualsense|dualshock|wireless controller|ps[345]/i.test(id||'')?LBLS.ps:LBLS.xbox;
   function cursorEl(){let c=document.getElementById('padcur');if(!c){c=document.createElement('div');c.id='padcur';document.body.appendChild(c);}return c;}
   function hintEl(){let c=document.getElementById('padhint');if(!c){c=document.createElement('div');c.id='padhint';document.body.appendChild(c);}return c;}
   function activate(){if(!active){active=true;document.body.classList.add('padui');}if(!rafOn){rafOn=true;requestAnimationFrame(loop);}}
@@ -1694,8 +1808,8 @@ const PAD=(()=>{
         const t=targets();c.classList.toggle('hot',t.includes(hex));}else c.style.display='none';}
     else c.style.display='none';
     if(active&&inGame()&&!overlay()){const m=mainBtn();const txt=m?m.textContent.replace(/\s+/g,' ').trim():'';
-      const parts=uiMode?['<b>Ⓐ</b> press','<b>Ⓑ</b> back to board','<b>✛</b> move between buttons']:
-        ['<b>Ⓐ</b> select','<b>Ⓑ</b> cancel',txt?`<b>Ⓧ</b> ${esc(txt)}`:'','<b>Ⓨ</b> buttons','<b>LB/RB</b> next piece','<b>☰</b> rules'];
+      const parts=uiMode?[`<b>${L.A}</b> press`,`<b>${L.B}</b> back to board`,'<b>✛</b> move between buttons']:
+        [`<b>${L.A}</b> select`,`<b>${L.B}</b> cancel`,txt?`<b>${L.X}</b> ${esc(txt)}`:'',`<b>${L.Y}</b> buttons`,`<b>${L.LB}/${L.RB}</b> next piece`,`<b>${L.MENU}</b> rules`];
       const html=parts.filter(Boolean).join('<span>·</span>');if(h.innerHTML!==html)h.innerHTML=html;h.style.display='flex';}
     else h.style.display='none';}
   // ---------- polling ----------
@@ -1703,6 +1817,7 @@ const PAD=(()=>{
     const pads=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
     let dx=0,dy=0,rx=0,ry=0;
     for(let pi=0;pi<pads.length;pi++){const g=pads[pi];const prev=prevBtn[g.index]||[];const now=g.buttons.map(b=>b.pressed||b.value>.5);
+      if(now.some(Boolean)||Math.hypot(g.axes[0]||0,g.axes[1]||0)>.55)L=styleOf(g.id);
       now.forEach((p,i)=>{if(p&&!prev[i]&&(i<12||i>15))onButton(i);});
       prevBtn[g.index]=now;
       let x=(now[BTN.RIGHT]?1:0)-(now[BTN.LEFT]?1:0),y=(now[BTN.DOWN]?1:0)-(now[BTN.UP]?1:0);
@@ -1724,7 +1839,7 @@ const PAD=(()=>{
     if(overlay()&&active&&!cur())ensureFocus();
     draw();
     if(pads.length||active){rafOn=true;requestAnimationFrame(loop);}}
-  addEventListener('gamepadconnected',e=>{activate();toast('🎮 Controller connected: stick moves, Ⓐ selects, Ⓑ cancels, Ⓨ for buttons.');});
+  addEventListener('gamepadconnected',e=>{L=styleOf(e.gamepad&&e.gamepad.id);activate();toast(`🎮 ${L.name} controller connected: stick moves, ${L.A} selects, ${L.B} cancels, ${L.Y} for buttons.`);});
   // keyboard does the same (arrow keys, Enter, Esc, Space, Q/E)
   addEventListener('keydown',e=>{
     const tg=e.target,typing=tg&&(tg.tagName==='INPUT'&&tg.type!=='checkbox'||tg.tagName==='TEXTAREA'||tg.tagName==='SELECT');
@@ -1741,6 +1856,7 @@ const PAD=(()=>{
 })();
 /* ================= 3D view (self-contained WebGL, no libraries) ================= */
 const B3=(()=>{
+let demoS=null,demoHome=null,camSave=null;const SG=()=>demoS||S;
 let canvas=null,gl=null,ok=false,tried=false,running=false,W=1,H=1,DPR=1;
 let P={};             // shader programs
 const objs=new Map(); // id -> scene object
@@ -2188,7 +2304,7 @@ function startCine(item){window.__cineN=(window.__cineN||0)+1;
   const st={a,t0:now(),fired:{},people:[],boat:a.boat?{p:[0,.13,0],q:Q.id(),s:[1,1,1],alpha:1}:null,crs:special?(a.lost?[{kind:a.lost,p:[0,-3,0],q:Q.id(),s:[1,1,1],alpha:1}]:[]):[{kind:a.kind,p:[0,-3,0],q:Q.id(),s:[1,1,1],alpha:1}]};
   const shown=special?a.victims.slice(0,8):a.victims;
   shown.forEach((v,i)=>{const home=special?[Math.cos(i*2.4)*(1.2+.25*(i%3)),-.3,Math.sin(i*2.4)*(1.0+.2*(i%3))]:(a.boat?[-.36+i*.36,.17,0]:[(i-(n-1)/2)*.46,-.3,(i%2?.22:-.1)]);
-    st.people.push({i,home,p:home.slice(),q:Q.id(),s:[1,1,1],alpha:1,col:hexRGB(S.players[v.o].color),dead:v.dead,hurt:0});});
+    st.people.push({i,home,p:home.slice(),q:Q.id(),s:[1,1,1],alpha:1,col:hexRGB(SG().players[v.o].color),dead:v.dead,hurt:0});});
   if(a.kind==='serpent')st.crs[0].s=[1.15,1.15,1.15];
   if(a.kind==='shark')st.crs.forEach(c=>c.fast=true);
   if(a.kind==='shark'&&a.variant===3)st.crs=[0,1,2].map(i=>({kind:'shark',p:[0,-3,0],q:Q.id(),s:[1,1,1],alpha:1,th:i*2.094,r:1.5+i*.35,fast:true}));
@@ -2396,11 +2512,11 @@ let VP=null,camPos=[0,10,10];
 function ray(cx,cy){const r=canvas.getBoundingClientRect();const x=(cx-r.left)/r.width*2-1,y=1-(cy-r.top)/r.height*2;const inv=M4.inv(VP);
   const un=(z)=>{const v=[x,y,z,1];const o=[0,0,0,0];for(let i=0;i<4;i++)for(let k=0;k<4;k++)o[i]+=inv[k*4+i]*v[k];return[o[0]/o[3],o[1]/o[3],o[2]/o[3]];};
   const a=un(-1),b=un(1);return[a,V.norm(V.sub(b,a))];}
-function pick(cx,cy){if(!S)return null;const[o,d]=ray(cx,cy);
+function pick(cx,cy){if(!SG())return null;const[o,d]=ray(cx,cy);
   const at=y=>{if(Math.abs(d[1])<1e-6)return null;const t=(y-o[1])/d[1];return[o[0]+d[0]*t,o[2]+d[2]*t];};
   const nearest=(pt)=>{let best=null,bd=9;for(const k of[...ALL,...ISLES]){const[x,z]=WP(k);const dd=Math.hypot(x-pt[0],z-pt[1])/(isIsle(k)?1.5:1);if(dd<bd){bd=dd;best=k;}}return bd<1?best:null;};
   let p=at(0.1);if(!p)return null;let k=nearest(p);
-  for(let i=0;i<2&&k;i++){const h=surf(S,k);if(h<.05)break;const p2=at(h);const k2=p2&&nearest(p2);if(!k2||k2===k)break;k=k2;}
+  for(let i=0;i<2&&k;i++){const h=surf(SG(),k);if(h<.05)break;const p2=at(h);const k2=p2&&nearest(p2);if(!k2||k2===k)break;k=k2;}
   return k;}
 const ptrs=new Map();let gest=null;
 function onDown(e){try{canvas.setPointerCapture(e.pointerId);}catch{}ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -2480,7 +2596,7 @@ function diff(prev,s){
   // tiles
   const revealNew=(s.revealNo||0)>seenReveal&&s.reveal;
   for(const[id,o]of [...objs]){if(o.kind!=='tile'||o.dying)continue;if(s.land[o.key])continue;o.dying=true;
-    if(revealNew&&s.reveal.hex===o.key){const who=s.players[s.reveal.by].name;flipTile(o,s.reveal,revealHidden(s.reveal),who);}else sinkAway(o);}
+    if(revealNew&&s.reveal.hex===o.key){const who=s.players[s.reveal.by].name;flipTile(o,s.reveal,demoS?false:revealHidden(s.reveal),who);}else sinkAway(o);}
   // undo can bring tiles back
   for(const k in s.land)if(!objs.has('t:'+k))tileObj(k,s.land[k]);
   const tileDelay=revealNew?1700:0;
@@ -2522,7 +2638,7 @@ function diff(prev,s){
   if(revealNew)seenReveal=s.revealNo;
 }
 function updateRings(s){
-  rings=[];const can=canAct();
+  rings=[];const can=!demoS&&canAct();
   if(can){
     for(const k of uiDests(s,ui.sel))rings.push({k,c:[.99,.88,.28],a:.9,fill:.22});
     if(s.phase==='remove')for(const k of removable(s))rings.push({k,c:[.98,.57,.24],a:ui.removeSel===k?1:.75,fill:ui.removeSel===k?.45:0,pulse:ui.removeSel!==k});
@@ -2530,12 +2646,12 @@ function updateRings(s){
     if(s.phase==='setupB')for(const k of ALL)if(setupBoatOK(s,k))rings.push({k,c:[.99,.88,.28],a:.8,fill:.15});
     for(const c of movableCreatures(s))if(!(ui.sel==='c:'+c.id))rings.push({k:c.hex,c:[.2,.83,.6],a:1,fill:.3,pulse:true});
   }
-  if(ui.sel){const[t,id]=ui.sel.split(':');let k=null;if(t==='e'){const e=s.explorers.find(x=>x.id===id);if(e&&e.st==='on')k=posOf(s,e);}
+  if(ui.sel&&!demoS){const[t,id]=ui.sel.split(':');let k=null;if(t==='e'){const e=s.explorers.find(x=>x.id===id);if(e&&e.st==='on')k=posOf(s,e);}
     if(t==='b'){const b=boatById(s,id);if(b)k=b.hex;}if(t==='c'){const c=s.creatures.find(x=>x.id===id);if(c)k=c.hex;}if(k)rings.push({k,c:[1,1,1],a:1,fill:0});}
   if(s.hl)s.hl.forEach((k,i)=>rings.push({k,c:[.98,.57,.24],a:i===s.hl.length-1?.9:.5,fill:0}));
 }
 function updateWait(s){
-  const want=canAct()&&s.phase==='roll'&&!die;
+  const want=!demoS&&canAct()&&s.phase==='roll'&&!die;
   if(want&&!dieWait){const th=randomThrow('w'+Date.now());dieWait={p:[th.p[0],FLOOR+DIE_H+.6,th.p[2]],q:Q.norm([.3,.2,.1,1]),t0:now()};drawDieFaces(BASE_MAP);}
   if(!want)dieWait=null;
 }
@@ -2543,9 +2659,9 @@ function updateWait(s){
 /* ---------- render loop ---------- */
 function frame(){
   if(!running)return;
-  const host=canvas.parentNode;if(!host||!document.body.contains(canvas)||!ui.view3d||mode!=='game'){running=false;return;}
+  const host=canvas.parentNode;if(!host||!document.body.contains(canvas)||(!demoS&&(!ui.view3d||mode!=='game'))){running=false;return;}
   const r=host.getBoundingClientRect();DPR=Math.min(2,window.devicePixelRatio||1);const w=Math.max(1,Math.round(r.width*DPR)),h=Math.max(1,Math.round(r.height*DPR));
-  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;const first=W<=1;W=w;H=h;if(first)resetView();else{fitCam();if(!cam.user)cam.dist=cam.fit;}}
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;const first=W<=1;W=w;H=h;if(first&&!demoS)resetView();else{fitCam();if(!cam.user)cam.dist=cam.fit;}}
   const tn=now();
   // animations
   for(const a of anims){if(tn<a.t0)continue;const t=clamp((tn-a.t0)/a.dur,0,1);a.fn(t);if(t>=1){a.fin=true;a.done&&a.done();}}
@@ -2572,16 +2688,16 @@ function drawScene(tn){
   const draw=(m,M,tint,alpha,emis)=>{gl.uniformMatrix4fv(pr.u.uM,false,M);gl.uniform4fv(pr.u.uTint,[tint[0],tint[1],tint[2],alpha]);gl.uniform1f(pr.u.uEmis,emis||0);
     useAttr(pr,'aP',m.bp,3);useAttr(pr,'aN',m.bn,3);useAttr(pr,'aC',m.bc,3);gl.drawArrays(gl.TRIANGLES,0,m.n);};
   const list=[...objs.values()].sort((a,b)=>(a.alpha<1)-(b.alpha<1));
-  const selId=ui.sel?ui.sel.split(':')[1]:null;
+  const selId=ui.sel&&!demoS?ui.sel.split(':')[1]:null;
   for(const o of list){if(!o.vis)continue;let pos=o.pos,q=o.q;
     const moving=anims.some(a=>a.o===o&&tn>=a.t0);
     if(o.bob){const ph=(pos[0]*1.7+pos[2]*1.3);pos=[pos[0],pos[1]+waveH(pos[0],pos[2],time)+(o.kind==='boat'?.17:0),pos[2]];if(!moving)q=Q.mul(q,Q.axis([1,0,0],Math.sin(time*1.3+ph)*.05));}
     let tint=[1,1,1],emis=o.emis||0;
-    if(o.kind==='ex'){tint=hexRGB(S.players[o.o]?S.players[o.o].color:'#ffffff');if(o.id===selId)emis+=.35+.25*Math.sin(time*6);}
+    if(o.kind==='ex'){tint=hexRGB(SG().players[o.o]?SG().players[o.o].color:'#ffffff');if(o.id===selId)emis+=.35+.25*Math.sin(time*6);}
     if(o.id===selId&&o.kind!=='ex')emis+=.25+.2*Math.sin(time*6);
-    if(o.kind==='ex'&&!moving){const e=S.explorers.find(x=>x.id===o.id);
+    if(o.kind==='ex'&&!moving){const e=SG().explorers.find(x=>x.id===o.id);
       if(e&&e.boat){const b=objs.get(e.boat);if(b)pos=[pos[0],b.pos[1]+waveH(b.pos[0],b.pos[2],time)+.17+.05,pos[2]];}
-      else if(e&&e.st==='on'&&!S.land[e.hex])pos=[pos[0],pos[1]+waveH(pos[0],pos[2],time),pos[2]];}
+      else if(e&&e.st==='on'&&!SG().land[e.hex])pos=[pos[0],pos[1]+waveH(pos[0],pos[2],time),pos[2]];}
     if(o.hurt)tint=V.lerp(tint,[1,.12,.1],o.hurt);
     if(o.kind==='whale')q=Q.yaw(cam.yaw);
     const M=M4.trs(pos,q,o.kind==='whale'?o.s.map(v=>v*1.08):o.s);if(o.alpha<1)gl.depthMask(false);
@@ -2595,7 +2711,7 @@ function drawScene(tn){
     useAttr(pr,'aP',MESH.thex.bp,3);useAttr(pr,'aU',MESH.thex.bu,2);gl.drawArrays(gl.TRIANGLES,0,MESH.thex.n);}
   // highlight rings
   pr=P.basic;gl.useProgram(pr.p);gl.depthMask(false);
-  for(const r of rings){const[x,z]=WP(r.k);const y=surf(S,r.k)+.05+(isIsle(r.k)?.2:0);const sc=isIsle(r.k)?1.6:1;const a=r.a*(r.pulse?.55+.45*Math.sin(time*5):1);
+  for(const r of rings){const[x,z]=WP(r.k);const y=surf(SG(),r.k)+.05+(isIsle(r.k)?.2:0);const sc=isIsle(r.k)?1.6:1;const a=r.a*(r.pulse?.55+.45*Math.sin(time*5):1);
     if(r.fill)draw(MESH.fill,M4.trs([x,y-.005,z],Q.id(),[sc,1,sc]),r.c,r.fill*(r.pulse?.6+.4*Math.sin(time*5):1),.8);
     draw(MESH.ring,M4.trs([x,y,z],Q.id(),[sc,1,sc]),r.c,a,.9);}
   gl.depthMask(true);
@@ -2607,7 +2723,7 @@ function drawScene(tn){
   pr=P.spr;gl.useProgram(pr.p);gl.uniformMatrix4fv(pr.u.uVP,false,VP);
   const view=M4.look(camPos,tgt,[0,1,0]);const R=[view[0],view[4],view[8]],U=[view[1],view[5],view[9]];gl.uniform3fv(pr.u.uR,R);gl.uniform3fv(pr.u.uU,U);gl.uniform1f(pr.u.uS,.23);
   useAttr(pr,'aP',MESH.quad.bp,3);useAttr(pr,'aU',MESH.quad.bu,2);gl.uniform4fv(pr.u.uTint,[1,1,1,1]);gl.disable(gl.DEPTH_TEST);
-  for(const e of S.explorers){if(e.st!=='on'&&e.st!=='safe')continue;if(!valueVisible(e))continue;const o=objs.get(e.id);if(!o||o.alpha<.9)continue;
+  for(const e of SG().explorers){if(e.st!=='on'&&e.st!=='safe')continue;if(demoS?!e.showVal:!valueVisible(e))continue;const o=objs.get(e.id);if(!o||o.alpha<.9)continue;
     gl.uniform3fv(pr.u.uC,[o.pos[0],o.pos[1]+1.0,o.pos[2]]);gl.bindTexture(gl.TEXTURE_2D,TEX.num[e.val]);gl.uniform1i(pr.u.uT,0);gl.drawArrays(gl.TRIANGLES,0,6);}
   gl.enable(gl.DEPTH_TEST);
   // die (waiting or rolling)
@@ -2632,10 +2748,16 @@ function drawDie(tn,time){
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,TEX.die);gl.uniform1i(pr.u.uT,0);useAttr(pr,'aP',MESH.die.bp,3);useAttr(pr,'aU',MESH.die.bu,2);gl.drawArrays(gl.TRIANGLES,0,MESH.die.n);
 }
 
-return{attach,sync,resetView,get ok(){return ok;},get tried(){return tried;},supported(){if(!tried)init();return ok;},
+function demoStart(host){if(!tried)init();if(!ok)return false;if(!demoS){camSave={...cam};demoHome=canvas.parentNode;}
+  demoS={players:[],explorers:[],boats:[],creatures:[],land:{}};attach(host);return true;}
+function demoSync(s,c){if(!ok||!demoS)return;demoS=s;sync(s);if(c){Object.assign(cam,c,{user:true});}}
+function demoStop(){if(!demoS)return;demoS=null;lastStateRef=null;gid=null;cineQ=[];cine=null;stageSplash=[];anims=[];rings=[];caption='';
+  if(camSave)Object.assign(cam,camSave);const cf=document.getElementById('cine3d');if(cf)cf.style.display='none';
+  if(demoHome&&document.body.contains(demoHome))attach(demoHome);demoHome=null;}
+return{attach:h=>{if(demoS){demoHome=h;return ok;}return attach(h);},sync:s=>{if(!demoS)sync(s);},demoStart,demoSync,demoStop,get demo(){return !!demoS;},resetView,get ok(){return ok;},get tried(){return tried;},supported(){if(!tried)init();return ok;},
   zoom(f){cam.dist=clamp(cam.dist*f,cam.fit*.35,cam.fit*1.5);},
   orbit(dx,dy){cam.user=true;cam.yaw-=dx;cam.pitch=clamp(cam.pitch+dy,.42,1.45);},
-  hexScreen(k){if(!ok||!VP||!S||!canvas||!canvas.isConnected)return null;const[x,z]=WP(k);const y=isIsle(k)?.15:surf(S,k);const a=project([x,y,z]),b=project([x+.5,y,z]),c=project([x,y,z+.5]);
+  hexScreen(k){if(!ok||!VP||!SG()||!canvas||!canvas.isConnected)return null;const[x,z]=WP(k);const y=isIsle(k)?.15:surf(SG(),k);const a=project([x,y,z]),b=project([x+.5,y,z]),c=project([x,y,z+.5]);
     return[a[0],a[1],Math.max(Math.hypot(b[0]-a[0],b[1]-a[1]),Math.hypot(c[0]-a[0],c[1]-a[1]))*1.6];},
   rollButton(){if(!ok)return false;const th=dieWait?{...randomThrow('b'+Date.now()),p:dieWait.p.slice()}:randomThrow('b'+Date.now());const face=dieResult(th);dieWait=null;act(ns=>{doRoll(ns,face);ns.lastRoll.throw=th;});return true;},
   _cam:o=>{Object.assign(cam,o,{user:true});},
