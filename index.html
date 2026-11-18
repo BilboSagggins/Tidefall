@@ -124,6 +124,12 @@ body.padui :focus{outline:3px solid #fde047!important;outline-offset:2px;box-sha
 .tutcap:empty{display:none}.tutcap.pop{animation:fxIn .25s ease-out}
 .tut3d .cap3d{font-size:12px;padding:5px 10px;top:6px}
 body.tv .tut3d{height:52vh}body.tv .tutcap{font-size:22px}
+#voicebar{position:fixed;left:8px;bottom:8px;z-index:44;display:none;align-items:center;gap:6px;flex-wrap:wrap;max-width:calc(100vw - 16px);background:rgba(4,20,32,.9);border:1px solid #ffffff26;border-radius:999px;padding:5px 8px;box-shadow:0 6px 18px rgba(0,0,0,.4);font-size:13px}
+#voicebar button{flex:0 0 auto}
+.vchip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;background:#0e3348;border:2px solid transparent;white-space:nowrap;transition:border-color .12s}
+.vchip.talk{border-color:#4ade80;box-shadow:0 0 10px #4ade8077}.vchip.wait{opacity:.55}
+.verr{color:#fca5a5;font-size:12px;max-width:260px}
+@media (max-width:820px){body.gm #voicebar{top:58px;bottom:auto;font-size:12px;padding:3px 6px;gap:4px}body.gm #voicebar .vchip{padding:2px 7px}body.gm #voicebar button.small{padding:4px 9px;font-size:12px}}
 .tutor{position:fixed;inset:0;z-index:60;background:rgba(2,12,20,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:12px;animation:fxIn .2s ease-out}
 .tutbox{width:min(560px,100%);max-height:96vh;overflow:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--accent);border-radius:18px;padding:14px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .tuthead{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
@@ -573,7 +579,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v39-firebase';
+const BUILD='v40-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -1162,6 +1168,7 @@ async function watchOnline(code){
 function enterOnline(code){
   leaveOnline();
   net.online=true;net.code=code;net.ref=DB.doc('games/'+code);net.loaded=false;S=null;mode='lobby';ui.seenRoll=undefined;
+  try{VOICE.room(code);}catch(e){console.warn(e);}
   try{location.hash='g-'+code;}catch{}
   const timer=setTimeout(()=>{if(!net.loaded){ui.err='Still connecting to the game…';render();}},10000);
   net.unsubs.push(net.ref.onSnapshot(snap=>{
@@ -1177,7 +1184,7 @@ function enterOnline(code){
   },()=>{}));
   render();
 }
-function leaveOnline(){net.unsubs.forEach(u=>{try{u();}catch{}});net.unsubs=[];net.online=false;net.watch=false;net.ref=null;net.meta=null;net.seats=[];net.code=null;}
+function leaveOnline(){try{VOICE.stopRoom();}catch{}net.unsubs.forEach(u=>{try{u();}catch{}});net.unsubs=[];net.online=false;net.watch=false;net.ref=null;net.meta=null;net.seats=[];net.code=null;}
 // the lobby's players: people who joined, then any computer players the host added, 4 at most
 function crew(){const bots=(net.meta&&net.meta.bots)||[];return[...net.seats.map(x=>({...x,bot:false})),...bots.map(b=>({...b,bot:true}))].slice(0,4);}
 async function addBot(){const bots=((net.meta&&net.meta.bots)||[]).slice();if(crew().length>=4)return;
@@ -1356,10 +1363,11 @@ function unitLabel(sel){
 function render(){
   document.body.classList.toggle('gm',mode==='game');
   document.body.classList.toggle('tv',(mode==='game'||mode==='lobby')&&isTV());
-  if(mode==='home')return renderHome();
-  if(mode==='lobby')return renderLobby();
-  if(mode==='map')return renderMap();
-  renderGame();
+  if(mode==='home')renderHome();
+  else if(mode==='lobby')renderLobby();
+  else if(mode==='map')renderMap();
+  else renderGame();
+  try{VOICE.draw();}catch{}
 }
 const RULES=`<details><summary>How to play</summary><div class="rules">
 <p>Atlantis is sinking. Get your explorers to one of the four safe islands 🏝️ in the corners of the sea before the volcano erupts. Each explorer has a hidden value from 1 to 6. Only you can see your own values. Your score is the total value of the explorers you save, so saving fewer, more valuable explorers can still win.</p>
@@ -1692,6 +1700,80 @@ function renderGame(){
   maybeTutorial();
   scheduleAI();
 }
+/* ---------- voice chat (hosted build only): WebRTC between the people in a room, signalled through the game database ---------- */
+const VOICE=(()=>{
+  const OK=()=>HOSTED&&!!window.RTCPeerConnection&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!!DB;
+  const ICE={iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}]};
+  let code=null,unsubP=null,present=[],joined=false,muted=false,sid='',mic=null,beat=null,joining=false,err='';
+  const peers=new Map(); // uid -> {pc,audio,sid,unsub,level,an}
+  let actx=null;const levels={};
+  const fresh=p=>Date.now()-(p.at||0)<75000;
+  function pairKey(a,b){return a<b?a+'_'+b:b+'_'+a;}
+  function room(c){if(c===code)return;stopRoom();code=c;if(!OK()||!c)return;
+    unsubP=DB.collection(`games/${c}/voice`).onSnapshot(q=>{present=[];q.docs.forEach(d=>{const v=d.data();if(v&&v.uid&&fresh(v))present.push(v);});reconcile();draw();},()=>{});draw();}
+  function stopRoom(){leave();if(unsubP){try{unsubP();}catch{}}unsubP=null;code=null;present=[];draw();}
+  async function join(){if(!OK()||!code||joined||joining)return;joining=true;err='';draw();
+    try{mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});}
+    catch(e){joining=false;err=e&&e.name==='NotAllowedError'?'Microphone blocked. Allow the microphone for this site, then try again.':'No microphone available.';draw();return;}
+    try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume&&actx.resume();}catch{}
+    sid=Math.random().toString(36).slice(2,10);joined=true;joining=false;muted=false;
+    try{await DB.doc(`games/${code}/voice/${MYID}`).set({uid:MYID,sid,nick:myNick(),muted,at:Date.now()});}
+    catch(e){joined=false;mic.getTracks().forEach(t=>t.stop());mic=null;err=e&&e.code==='permission-denied'?'Voice chat needs the updated database rules (see SETUP.md).':'Could not start voice chat.';draw();return;}
+    beat=setInterval(pub,25000);watchLevel(MYID,mic);reconcile();draw();}
+  function pub(){if(!joined||!code)return Promise.resolve();
+    return DB.doc(`games/${code}/voice/${MYID}`).set({uid:MYID,sid,nick:myNick(),muted,at:Date.now()}).catch(()=>{});}
+  function myNick(){const s=net.seats.find(x=>x.uid===MYID);return s?s.nick:(lsGet('tf_nick')||'Player');}
+  function leave(){if(!joined)return;joined=false;clearInterval(beat);beat=null;
+    for(const uid of [...peers.keys()])drop(uid);
+    if(mic){mic.getTracks().forEach(t=>t.stop());mic=null;}
+    if(code)DB.doc(`games/${code}/voice/${MYID}`).delete().catch(()=>{});delete levels[MYID];draw();}
+  function setMute(m){muted=m;if(mic)mic.getAudioTracks().forEach(t=>t.enabled=!m);pub();draw();}
+  function drop(uid){const p=peers.get(uid);if(!p)return;try{p.unsub&&p.unsub();}catch{}try{p.pc.close();}catch{}if(p.audio){p.audio.srcObject=null;p.audio.remove();}peers.delete(uid);delete levels[uid];}
+  // keep one connection per other person in voice; the lower id makes the offer
+  function reconcile(){if(!joined)return;
+    const others=present.filter(p=>p.uid!==MYID);
+    for(const[uid,p]of[...peers]){const o=others.find(x=>x.uid===uid);if(!o||o.sid!==p.sid)drop(uid);}
+    for(const o of others){if(peers.has(o.uid))continue;connect(o);}}
+  function waitIce(pc){return new Promise(res=>{if(pc.iceGatheringState==='complete')return res();const t=setTimeout(res,2500);
+    pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){clearTimeout(t);res();}});});}
+  function makePC(o){const pc=new RTCPeerConnection(ICE);mic.getTracks().forEach(t=>pc.addTrack(t,mic));
+    const audio=document.createElement('audio');audio.autoplay=true;audio.setAttribute('playsinline','');audio.style.display='none';document.body.appendChild(audio);
+    pc.ontrack=e=>{const st=e.streams[0]||new MediaStream([e.track]);audio.srcObject=st;audio.play&&audio.play().catch(()=>{});watchLevel(o.uid,st);};
+    pc.onconnectionstatechange=()=>{const p=peers.get(o.uid);if(p)p.state=pc.connectionState;draw();
+      if(pc.connectionState==='failed'){setTimeout(()=>{const p2=peers.get(o.uid);if(p2&&p2.pc===pc){drop(o.uid);reconcile();}},1500);}};
+    const p={pc,audio,sid:o.sid,state:'new'};peers.set(o.uid,p);return p;}
+  async function connect(o){const key=pairKey(MYID,o.uid),ref=DB.doc(`games/${code}/rtc/${key}`);const p=makePC(o);
+    if(MYID<o.uid){
+      try{await p.pc.setLocalDescription(await p.pc.createOffer());await waitIce(p.pc);
+        if(peers.get(o.uid)!==p)return;
+        await ref.set({from:MYID,fsid:sid,tsid:o.sid,offer:p.pc.localDescription.sdp,answer:'',at:Date.now()});}catch(e){console.warn(e);return;}
+      p.unsub=ref.onSnapshot(s=>{const d=s.exists&&s.data();if(!d||d.fsid!==sid||d.tsid!==o.sid||!d.answer||p.pc.currentRemoteDescription)return;
+        p.pc.setRemoteDescription({type:'answer',sdp:d.answer}).catch(e=>console.warn(e));});
+    } else {
+      p.unsub=ref.onSnapshot(async s=>{const d=s.exists&&s.data();if(!d||d.fsid!==o.sid||d.tsid!==sid||!d.offer||p.answered)return;p.answered=true;
+        try{await p.pc.setRemoteDescription({type:'offer',sdp:d.offer});await p.pc.setLocalDescription(await p.pc.createAnswer());await waitIce(p.pc);
+          if(peers.get(o.uid)!==p)return;await ref.update({answer:p.pc.localDescription.sdp});}catch(e){console.warn(e);p.answered=false;}});
+    }}
+  // who is talking: a small level meter per voice
+  function watchLevel(uid,stream){try{if(!actx)return;const src=actx.createMediaStreamSource(stream);const an=actx.createAnalyser();an.fftSize=256;src.connect(an);
+    const buf=new Uint8Array(an.fftSize);const tick=()=>{if(uid!==MYID&&!peers.has(uid))return;if(uid===MYID&&!joined)return;an.getByteTimeDomainData(buf);let m=0;for(const v of buf)m=Math.max(m,Math.abs(v-128));
+      const talk=m>10;if(levels[uid]!==talk){levels[uid]=talk;talkMarks();}setTimeout(tick,150);};tick();}catch{}}
+  function talkMarks(){document.querySelectorAll('#voicebar [data-vu]').forEach(c=>c.classList.toggle('talk',!!levels[c.dataset.vu]&&c.dataset.mu!=='1'));}
+  // ---------- the voice pill ----------
+  function el(){let d=document.getElementById('voicebar');if(!d){d=document.createElement('div');d.id='voicebar';document.body.appendChild(d);}return d;}
+  function draw(){const d=el();const show=OK()&&code&&net.online&&!isTV()&&(mode==='lobby'||mode==='game');
+    if(!show){d.style.display='none';return;}d.style.display='flex';
+    const people=present.filter(p=>p.uid!==MYID||joined);
+    const chips=people.map(p=>{const me=p.uid===MYID;const st=me?'':((peers.get(p.uid)||{}).state||'');const mu=me?muted:p.muted;
+      return `<span data-vu="${esc(p.uid)}" data-mu="${mu?1:0}" class="vchip ${st&&st!=='connected'&&joined?'wait':''}" title="${esc(st||'')}">${mu?'🔇':'🎙️'} ${esc(me?'You':p.nick||'Player')}</span>`;}).join('');
+    const html=joined?`${chips}<button class="small ${muted?'danger':'ghost'}" id="vMute">${muted?'Unmute':'Mute'}</button><button class="small ghost" id="vLeave">Leave voice</button>`
+      :`<button class="small primary" id="vJoin" ${joining?'disabled':''}>${joining?'Connecting…':'🎙️ Join voice'}</button>${people.length?`<span class="note">${people.length} talking</span>`:''}${err?`<span class="verr">${esc(err)}</span>`:''}`;
+    if(d.__h===html){talkMarks();return;}d.__h=html;d.innerHTML=html;talkMarks();
+    const b=id=>d.querySelector('#'+id);
+    if(b('vJoin'))b('vJoin').onclick=join;if(b('vMute'))b('vMute').onclick=()=>setMute(!muted);if(b('vLeave'))b('vLeave').onclick=leave;}
+  addEventListener('pagehide',()=>{if(joined&&code)DB.doc(`games/${code}/voice/${MYID}`).delete().catch(()=>{});});
+  return{room,stopRoom,join,leave,draw,get joined(){return joined;},get peers(){return peers;},get present(){return present;},available:OK};
+})();
 /* ================= game controller + keyboard support ================= */
 // Xbox / standard gamepad: stick or D-pad moves a cursor over the board, A selects, B cancels,
 // X does the main action, Y jumps to the buttons, LB/RB hop between highlighted spaces.

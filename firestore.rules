@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Each game room. Any signed-in player can read it and save moves to it.
+    match /games/{code} {
+      allow read, create, update: if request.auth != null;
+      allow delete: if false;
+      // Each player's seat in a room's lobby. Players can only write their own seat.
+      match /seats/{uid} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == uid;
+      }
+      // Voice chat: who is in the call. Players can only write their own entry.
+      match /voice/{uid} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == uid;
+      }
+      // Voice chat: connection setup between two players (names are "uidA_uidB").
+      match /rtc/{pair} {
+        allow read: if request.auth != null && pair.split('_').hasAny([request.auth.uid]);
+        allow write: if request.auth != null && pair.split('_').hasAny([request.auth.uid]);
+      }
+    }
+  }
+}
