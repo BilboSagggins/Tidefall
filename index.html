@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tidefall">
+<meta name="theme-color" content="#041620">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Tidefall — Escape the Sinking Isle</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -130,6 +137,16 @@ body.tv .tut3d{height:52vh}body.tv .tutcap{font-size:22px}
 .vchip.talk{border-color:#4ade80;box-shadow:0 0 10px #4ade8077}.vchip.wait{opacity:.55}
 .verr{color:#fca5a5;font-size:12px;max-width:260px}
 @media (max-width:820px){body.gm #voicebar{top:58px;bottom:auto;font-size:12px;padding:3px 6px;gap:4px}body.gm #voicebar .vchip{padding:2px 7px}body.gm #voicebar button.small{padding:4px 9px;font-size:12px}}
+/* iPhone / installed-app sizing: keep clear of the notch, the home bar and rounded corners */
+html{-webkit-text-size-adjust:100%;touch-action:manipulation}
+body{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));padding-top:max(12px,env(safe-area-inset-top))}
+body.gm #app{box-sizing:border-box;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+#voicebar{bottom:calc(8px + env(safe-area-inset-bottom));left:calc(8px + env(safe-area-inset-left))}
+#padhint{bottom:calc(8px + env(safe-area-inset-bottom))}
+.tutor{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.toast{margin-bottom:env(safe-area-inset-bottom)}
+.a2hs{display:flex;gap:10px;align-items:flex-start;background:#0e3348;border:1px solid var(--accent);border-radius:14px;padding:10px 12px;margin:0 0 12px;font-size:14px;line-height:1.4}
+.a2hs .ic{font-size:22px;line-height:1}.a2hs b{color:#fff}.a2hs button{flex:0 0 auto;margin-left:auto}
 .tutor{position:fixed;inset:0;z-index:60;background:rgba(2,12,20,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:12px;animation:fxIn .2s ease-out}
 .tutbox{width:min(560px,100%);max-height:96vh;overflow:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:2px solid var(--accent);border-radius:18px;padding:14px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .tuthead{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
@@ -214,6 +231,7 @@ details .rules h4{margin:12px 0 4px;color:var(--accent);font-size:14px}
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .topbar .t{font-family:Fraunces,Georgia,serif;font-weight:800;font-size:22px}
 .topbar .t span{color:var(--accent)}
+@media (max-width:820px){body.gm #voicebar{top:calc(58px + env(safe-area-inset-top));bottom:auto}body:not(.gm){padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);padding-bottom:calc(24px + env(safe-area-inset-bottom))}}
 </style>
 </head>
 <body>
@@ -579,7 +597,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v40-firebase';
+const BUILD='v41-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -1395,12 +1413,17 @@ A whale or sea serpent sharing a space with a boat that has anyone in it attacks
 <h4>Kept tiles are secret</h4><p>When someone sinks a tile they get to keep, everyone else only sees that they kept something. Its identity is revealed when it's played.</p>
 <h4>End</h4><p>The game ends the moment the 🌋 volcano tile is sunk. Everyone still on the island or at sea is lost. Reveal the values of your rescued explorers. The highest total wins.</p></div></details>`;
 
+function inApp(){try{return navigator.standalone===true||matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches;}catch{return false;}}
+function isIOS(){const u=navigator.userAgent||'';return /iPhone|iPad|iPod/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1);}
+function a2hsHTML(){if(!HOSTED||inApp()||lsGet('tf_a2hs')==='0')return '';const ios=isIOS(),and=/Android/.test(navigator.userAgent||'');if(!ios&&!and)return '';
+  return `<div class="a2hs"><span class="ic">📲</span><span><b>Play full screen:</b> ${ios?'in Safari tap <b>Share</b> <span style="white-space:nowrap">(the square with an arrow ↑)</span>, then <b>Add to Home Screen</b>.':'tap the <b>⋮</b> menu, then <b>Add to Home screen</b> (or <b>Install app</b>).'} Open Tidefall from that icon and the browser bars are gone.</span><button class="small ghost" id="a2hsX">Got it</button></div>`;}
 function renderHome(){
   const nick=lsGet('tf_nick');
   const onlineOK=!!DB;
   app.innerHTML=`
   <h1>Tide<span>fall</span></h1>
   <p class="sub">Escape the sinking isle. Dodge sharks, whales and sea serpents. 2–4 players. <span style="opacity:.6">· ${BUILD}</span></p>
+  ${a2hsHTML()}
   <div class="grid2">
     <div class="card">
       <h2>🌐 Play online</h2>
@@ -1410,7 +1433,7 @@ function renderHome(){
       <div class="row" style="margin-top:8px"><button id="createTV">📺 Host on a TV</button></div>
       <p class="note" style="margin-top:6px">Open this page on the TV (on Fire TV, use the Silk browser) and tap <b>Host on a TV</b>. The TV shows the board for everyone, and each player joins and plays from their phone.</p>
       <label for="jcode">…or join with a room code</label>
-      <div class="row"><input id="jcode" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase;flex:2" value="${esc(ui.pendingCode||'')}"><button id="join" style="flex:1">Join</button><button class="ghost" id="watchTV" style="flex:1" title="Show this game on this screen without taking a seat">📺 Watch</button></div>
+      <div class="row"><input id="jcode" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase;flex:2" value="${esc(ui.pendingCode||'')}"><button id="join" style="flex:1">Join</button><button class="ghost" id="watchTV" style="flex:1;white-space:nowrap" title="Show this game on this screen without taking a seat">📺 Watch</button></div>
       <p class="note" style="margin-top:6px">Another TV in a different room or house? Open this page on it, type the room code and tap <b>📺 Watch</b>. Every screen shows the same game live.</p>
       <p class="note" style="margin-top:10px">Create a game, then send your friends the invite link or the room code.</p>`}
       ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
@@ -1437,6 +1460,7 @@ function renderHome(){
   <div class="card"><details><summary>📖 Tile guide</summary>${guideHTML()}</details></div>`;
   document.getElementById('map').onclick=()=>{mode='map';render();};
   document.getElementById('tutHome').onclick=()=>openTutorial(true);
+  const ax=document.getElementById('a2hsX');if(ax)ax.onclick=()=>{lsSet('tf_a2hs','0');render();};
   const np=document.getElementById('np'),names=document.getElementById('names');
   const drawNames=()=>{const n=+np.value;names.innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}</label><input class="pn" maxlength="16" value="${i?'Computer '+i:'You'}"><div class="row" style="margin-top:6px"><select class="pt" style="flex:1"><option value="h" ${i?'':'selected'}>Human</option><option value="ai" ${i?'selected':''}>Computer</option></select><select class="pc2" style="flex:1">${PALETTE.map((p,j)=>`<option value="${p.c}" ${(i===0?ui.myColor===p.c:assignColors([{color:ui.myColor},...Array(i).fill({})])[i]===p.c)?'selected':''}>● ${p.n}</option>`).join('')}</select></div>`).join('');
     names.querySelectorAll('.pc2').forEach(sel=>{const paint=()=>{sel.style.color=isDark(sel.value)?'#cbd5e1':sel.value;};paint();sel.onchange=paint;});};
