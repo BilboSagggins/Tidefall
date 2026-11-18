@@ -573,7 +573,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v38-firebase';
+const BUILD='v39-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -614,6 +614,7 @@ let FB_ERR='';
   capsReady=true;
   const h=(location.hash||'').replace('#','');
   if(DB&&/^g-[A-Z]{5}$/.test(h)&&mode==='home'){joinOnline(h.slice(2),lsGet('tf_nick')||'');return;}
+  if(DB&&/^w-[A-Z]{5}$/.test(h)&&mode==='home'){watchOnline(h.slice(2));return;}
   render();
 })();
 setTimeout(()=>{if(!capsReady){capsReady=true;render();}},10000);
@@ -628,7 +629,8 @@ function pushHist(prev,ns){const snap=clone(prev);delete snap.hist;ns.hist=(prev
 // Online, the host is whoever created the room. When a TV created it, the first player to join shares the host controls.
 function firstSeat(){return S&&S.players[0]?S.players[0].id:(net.seats[0]&&net.seats[0].uid);}
 function amHost(){const m=net.meta;return !!(m&&(m.host===MYID||(m.tv&&firstSeat()===MYID)));}
-function isTV(){return !!(net.online&&net.meta&&net.meta.tv&&net.meta.tv===MYID);}
+function isTV(){return !!(net.online&&net.meta&&(net.watch||(net.meta.tv&&net.meta.tv===MYID)));}
+function isHostTV(){return !!(net.online&&net.meta&&net.meta.tv&&net.meta.tv===MYID);}
 const HOSTED=/firebase/.test(BUILD);   // only the self-hosted build has a public join link worth putting in a QR code
 function joinURL(){return location.origin+location.pathname+'#g-'+(net.code||'');}
 let wakeLock=null;
@@ -1148,6 +1150,15 @@ async function joinOnline(code,nick){
     enterOnline(code);
   }catch(e){ui.err=writeErr(e);mode='home';render();}
 }
+// Another screen showing the same game: no seat, TV layout, nothing hidden is shown
+async function watchOnline(code){
+  ui.err='';code=(code||'').toUpperCase().trim();
+  if(!/^[A-Z]{5}$/.test(code)){ui.err='Room codes are 5 letters.';mode='home';render();return;}
+  try{const snap=await DB.doc('games/'+code).get();
+    if(!snap.exists){ui.err='No game with code '+code+'.';mode='home';render();return;}
+    enterOnline(code);net.watch=true;try{location.hash='w-'+code;}catch{}keepAwake(true);render();
+  }catch(e){ui.err=writeErr(e);mode='home';render();}
+}
 function enterOnline(code){
   leaveOnline();
   net.online=true;net.code=code;net.ref=DB.doc('games/'+code);net.loaded=false;S=null;mode='lobby';ui.seenRoll=undefined;
@@ -1166,7 +1177,7 @@ function enterOnline(code){
   },()=>{}));
   render();
 }
-function leaveOnline(){net.unsubs.forEach(u=>{try{u();}catch{}});net.unsubs=[];net.online=false;net.ref=null;net.meta=null;net.seats=[];net.code=null;}
+function leaveOnline(){net.unsubs.forEach(u=>{try{u();}catch{}});net.unsubs=[];net.online=false;net.watch=false;net.ref=null;net.meta=null;net.seats=[];net.code=null;}
 // the lobby's players: people who joined, then any computer players the host added, 4 at most
 function crew(){const bots=(net.meta&&net.meta.bots)||[];return[...net.seats.map(x=>({...x,bot:false})),...bots.map(b=>({...b,bot:true}))].slice(0,4);}
 async function addBot(){const bots=((net.meta&&net.meta.bots)||[]).slice();if(crew().length>=4)return;
@@ -1391,7 +1402,8 @@ function renderHome(){
       <div class="row" style="margin-top:8px"><button id="createTV">📺 Host on a TV</button></div>
       <p class="note" style="margin-top:6px">Open this page on the TV (on Fire TV, use the Silk browser) and tap <b>Host on a TV</b>. The TV shows the board for everyone, and each player joins and plays from their phone.</p>
       <label for="jcode">…or join with a room code</label>
-      <div class="row"><input id="jcode" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase;flex:2" value="${esc(ui.pendingCode||'')}"><button id="join" style="flex:1">Join</button></div>
+      <div class="row"><input id="jcode" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase;flex:2" value="${esc(ui.pendingCode||'')}"><button id="join" style="flex:1">Join</button><button class="ghost" id="watchTV" style="flex:1" title="Show this game on this screen without taking a seat">📺 Watch</button></div>
+      <p class="note" style="margin-top:6px">Another TV in a different room or house? Open this page on it, type the room code and tap <b>📺 Watch</b>. Every screen shows the same game live.</p>
       <p class="note" style="margin-top:10px">Create a game, then send your friends the invite link or the room code.</p>`}
       ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
     </div>
@@ -1436,6 +1448,7 @@ function renderHome(){
     const getNick=()=>{const v=document.getElementById('nick').value.trim().slice(0,16);if(!v){ui.err='Enter your name first.';render();return null;}lsSet('tf_nick',v);return v;};
     document.getElementById('create').onclick=e=>{const n=getNick();if(n){e.target.disabled=true;createOnline(n);}};
     document.getElementById('createTV').onclick=e=>{e.target.disabled=true;createOnline('',true);};
+    document.getElementById('watchTV').onclick=e=>{e.target.disabled=true;ui.pendingCode='';watchOnline(document.getElementById('jcode').value);};
     document.getElementById('join').onclick=e=>{const n=getNick();if(n){e.target.disabled=true;ui.pendingCode='';joinOnline(document.getElementById('jcode').value,n);}};
   }
 }
@@ -1452,12 +1465,13 @@ function renderLobby(){
       <p class="tvsub">Grab your phones and join the game!</p>
       ${HOSTED?`<img class="tvqr" alt="QR code to join" src="${QR.dataURL(joinURL(),8,'#06202e','#ffffff')}"><p class="tvsub">Scan to join, or go to</p><p class="tvurl">${esc(location.host+location.pathname)}</p>`:`<p class="tvsub">On your phone, open Tidefall and join with this code:</p>`}
       <p class="tvsub" style="margin-top:14px">Room code</p><div class="code tvcode">${esc(net.code||'')}</div>
+      
     </div>
     <div class="tvcrew card">
       <h2>Crew (${crew().length}/4)</h2>
       <div class="players">${crewHTML(false)||'<p class="note">Waiting for players to join…</p>'}</div>
-      <p class="note">${crew().length<2?'At least 2 players are needed. Add computer players to fill empty seats.':'Ready! Start from here or from the first player’s phone.'}</p>
-      <div class="actions"><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>${crew().length<4?'<button id="addBot">🤖 Add computer</button>':''}<button class="ghost" id="leave">Exit</button></div>
+      <p class="note">📺 More TVs: open Tidefall on another screen, enter code <b>${esc(net.code||'')}</b> and tap <b>Watch</b>.</p><p class="note">${crew().length<2?'At least 2 players are needed. Add computer players to fill empty seats.':'Ready! Start from here or from the first player’s phone.'}</p>
+      <div class="actions">${isHostTV()?`<button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>${crew().length<4?'<button id="addBot">🤖 Add computer</button>':''}`:'<span class="note">📺 Extra screen: this TV follows the game. Start it from the host TV or the first player’s phone.</span>'}<button class="ghost" id="leave">Exit</button></div>
       ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
     </div>
   </div>`:`
