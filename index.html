@@ -143,6 +143,12 @@ body{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env
 body.gm #app{box-sizing:border-box;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
 #voicebar{bottom:calc(8px + env(safe-area-inset-bottom));left:calc(8px + env(safe-area-inset-left))}
 #padhint{bottom:calc(8px + env(safe-area-inset-bottom))}
+.mygames .mgrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #ffffff14}.mygames .mgrow:first-child{border-top:0}
+.mgcode{font-family:ui-monospace,Menlo,monospace;font-weight:800;letter-spacing:2px;color:var(--accent);flex:0 0 auto}
+.mgst{flex:1;min-width:0;line-height:1.35}.mgst span{opacity:.75;font-size:12px}.mgrow .yt{color:#4ade80}.mgrow.mine{background:#4ade8014;border-radius:10px;padding-left:6px}.mgrow.dim{opacity:.6}
+.nudge,.away,.claim{background:#0e3348;border:1px solid #ffffff26;border-radius:12px;padding:8px 10px;margin:8px 0;font-size:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.away{display:block;border-color:var(--accent)}.away div{padding:2px 0;font-size:13px}.away .row{padding:0 0 4px;font-size:14px}
+.claim .row{flex-basis:100%;display:flex;gap:6px}
 .tutor{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
 .toast{margin-bottom:env(safe-area-inset-bottom)}
 .a2hs{display:flex;gap:10px;align-items:flex-start;background:#0e3348;border:1px solid var(--accent);border-radius:14px;padding:10px 12px;margin:0 0 12px;font-size:14px;line-height:1.4}
@@ -327,7 +333,7 @@ const anyHouse=s=>!!(s.house&&(s.house.emptyBoats||s.house.whirlLand));
 const plural=(n,w)=>n+' '+w+(n===1?'':'s');
 function controllers(s,b){const c={};for(const e of aboard(s,b))c[e.o]=(c[e.o]||0)+1;const vals=Object.values(c);if(!vals.length)return null;const m=Math.max(...vals);return Object.keys(c).filter(o=>c[o]===m).map(Number);}
 function controls(s,b,p){const c=controllers(s,b);return c===null||c.includes(p);}
-function log(s,m){s.log.push(m);if(s.log.length>80)s.log.splice(0,s.log.length-80);}
+function log(s,m){s.logN=(s.logN||s.log.length)+1;s.log.push(m);if(s.log.length>80)s.log.splice(0,s.log.length-80);}
 
 function setupLandOK(s,k){return isLand(s,k)&&!onBoard(s).some(e=>e.hex===k);}
 function setupBoatOK(s,k){return isSea(s,k)&&NB[k].some(n=>isLand(s,n))&&!boatAt(s,k)&&!crAt(s,k).length;}
@@ -597,7 +603,7 @@ function aiStep(s){
 //ENGINE-END
 
 /* ================= UI ================= */
-const BUILD='v41-firebase';
+const BUILD='v42-firebase';
 /* ====== PASTE YOUR FIREBASE CONFIG HERE ======
    Firebase console > Project settings > General > Your apps > Web app > SDK setup and configuration > Config */
 const FIREBASE_CONFIG = {
@@ -681,6 +687,7 @@ function act(fn){
   commit(ns);
 }
 function commit(ns){
+  if(net.online&&!AI.inRun&&myIndex()>=0)ns.lastBy=MYID;
   S=ns;render();
   if(net.online&&net.ref){
     const payload={status:ns.phase==='ended'?'ended':'playing',state:JSON.stringify(ns),v:ns.v};
@@ -1128,8 +1135,11 @@ function checkFx(){
 const AI={paused:false,speed:1,timer:null};
 const SPEEDS=[{n:'Slow',ms:1300},{n:'Normal',ms:650},{n:'Fast',ms:220}];
 const BOT_NAMES=['Captain Reed','Admiral Vex','Skipper Moss','Navigator Ines'];
-function aiDriver(){return !net.online||!!(net.meta&&net.meta.host===MYID);}
+function aiDriver(){if(!net.online)return true;if(!(S&&S.async)&&net.meta&&net.meta.host===MYID)return true;
+  // over-days games: the player who just moved runs the computers; if they've gone, any player who opens the game does
+  if(S&&S.async&&myIndex()>=0)return S.lastBy===MYID||Date.now()-(net.lastChange||0)>6000;return false;}
 function scheduleAI(){
+  if(S&&S.async&&net.online&&mode==='game'&&S.phase!=='ended'&&S.players[S.turn].ai&&!aiDriver()&&!AI.wait){AI.wait=setTimeout(()=>{AI.wait=null;scheduleAI();},6500);}
   if(AI.timer||AI.paused||ui.tutOpen||!aiDriver()||mode!=='game'||!S||S.phase==='ended'||!S.players[S.turn].ai)return;
   let ms=S.phase.startsWith('setup')?Math.min(160,SPEEDS[AI.speed].ms):SPEEDS[AI.speed].ms;
   if(!S.phase.startsWith('setup'))ms=Math.max(ms,(fxBusyUntil-Date.now())*(AI.speed===2?.6:1)+250+(FXQ.length?2600:0));
@@ -1140,7 +1150,7 @@ function runAI(){
   const ns=clone(S);ns.hl=null;
   try{aiStep(ns);}catch(err){console.error(err);log(ns,'(Computer skipped a stuck step.)');endTurn(ns);}
   afterAction(ns);ns.v=(S.v||0)+1;pushHist(S,ns);ui.sel=null;ui.picker=null;
-  if(net.online)commit(ns);else{S=ns;render();}
+  if(net.online){AI.inRun=true;try{commit(ns);}finally{AI.inRun=false;}}else{S=ns;render();}
 }
 /* ---------- online ---------- */
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ';let c='';for(let i=0;i<5;i++)c+=A[Math.floor(Math.random()*A.length)];return c;}
@@ -1152,6 +1162,7 @@ async function createOnline(nick,tv){
     const meta={code,host:MYID,status:'lobby',v:0,state:'',created:Date.now()};if(tv)meta.tv=MYID;
     await ref.set(meta);
     if(!tv)await DB.doc(`games/${code}/seats/${MYID}`).set({uid:MYID,nick,at:Date.now(),color:ui.myColor});
+    if(!tv)saveGame(code);
     enterOnline(code);
   }catch(e){ui.err=writeErr(e);render();}
 }
@@ -1169,7 +1180,7 @@ async function joinOnline(code,nick){
     const d=snap.data();
     if(d.status==='lobby'){
       if(!nick){ui.err='Enter your name, then tap Join.';mode='home';ui.pendingCode=code;render();return;}
-      await DB.doc(`games/${code}/seats/${MYID}`).set({uid:MYID,nick,at:Date.now(),color:ui.myColor});
+      await DB.doc(`games/${code}/seats/${MYID}`).set({uid:MYID,nick,at:Date.now(),color:ui.myColor});saveGame(code);
     }
     enterOnline(code);
   }catch(e){ui.err=writeErr(e);mode='home';render();}
@@ -1193,7 +1204,7 @@ function enterOnline(code){
     if(!snap.metadata.fromCache){clearTimeout(timer);net.loaded=true;if(ui.err.startsWith('Still'))ui.err='';}
     if(!snap.exists){if(!snap.metadata.fromCache){ui.err='That game no longer exists.';leaveOnline();mode='home';render();}return;}
     const d=snap.data();net.meta=d;
-    if(d.state){const inc=JSON.parse(d.state);if(!S||inc.v>=S.v){S=inc;}mode='game';}
+    if(d.state){const inc=JSON.parse(d.state);if(!S||inc.v>S.v)net.lastChange=Date.now();if(!S||inc.v>=S.v){S=inc;}mode='game';noteGame(code);}
     else mode='lobby';
     render();
   },e=>{clearTimeout(timer);ui.err=writeErr(e);render();}));
@@ -1220,8 +1231,10 @@ async function startOnline(){
   const seats=crew();
   if(seats.length<2){toast('Need at least 2 players.');return;}
   const st=newGame(seats.map(x=>x.bot?{id:x.uid,name:'🤖 '+x.nick,color:x.color,ai:true}:{id:x.uid,name:x.nick,color:x.color}),{blind:!!ui.blindOnline,emptyBoats:!!ui.houseOnline,whirlLand:!!ui.whirlOnline});
+  if(ui.asyncOnline)st.async=true;
+  st.players.forEach(p=>{if(!p.ai)p.tok=seatCode();});
   S=st;mode='game';render();
-  try{await net.ref.update({status:'playing',state:JSON.stringify(st),v:st.v});}catch(e){toast(writeErr(e));}
+  try{await net.ref.update({status:'playing',state:JSON.stringify(st),v:st.v,async:!!st.async});}catch(e){toast(writeErr(e));}
 }
 function hostSkip(){
   if(!net.online||!amHost()||!S||S.phase==='ended')return;
@@ -1424,6 +1437,7 @@ function renderHome(){
   <h1>Tide<span>fall</span></h1>
   <p class="sub">Escape the sinking isle. Dodge sharks, whales and sea serpents. 2–4 players. <span style="opacity:.6">· ${BUILD}</span></p>
   ${a2hsHTML()}
+  ${myGamesHTML()}
   <div class="grid2">
     <div class="card">
       <h2>🌐 Play online</h2>
@@ -1460,6 +1474,7 @@ function renderHome(){
   <div class="card"><details><summary>📖 Tile guide</summary>${guideHTML()}</details></div>`;
   document.getElementById('map').onclick=()=>{mode='map';render();};
   document.getElementById('tutHome').onclick=()=>openTutorial(true);
+  wireMyGames();
   const ax=document.getElementById('a2hsX');if(ax)ax.onclick=()=>{lsSet('tf_a2hs','0');render();};
   const np=document.getElementById('np'),names=document.getElementById('names');
   const drawNames=()=>{const n=+np.value;names.innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}</label><input class="pn" maxlength="16" value="${i?'Computer '+i:'You'}"><div class="row" style="margin-top:6px"><select class="pt" style="flex:1"><option value="h" ${i?'':'selected'}>Human</option><option value="ai" ${i?'selected':''}>Computer</option></select><select class="pc2" style="flex:1">${PALETTE.map((p,j)=>`<option value="${p.c}" ${(i===0?ui.myColor===p.c:assignColors([{color:ui.myColor},...Array(i).fill({})])[i]===p.c)?'selected':''}>● ${p.n}</option>`).join('')}</select></div>`).join('');
@@ -1503,7 +1518,7 @@ function renderLobby(){
       <h2>Crew (${crew().length}/4)</h2>
       <div class="players">${crewHTML(false)||'<p class="note">Waiting for players to join…</p>'}</div>
       <p class="note">📺 More TVs: open Tidefall on another screen, enter code <b>${esc(net.code||'')}</b> and tap <b>Watch</b>.</p><p class="note">${crew().length<2?'At least 2 players are needed. Add computer players to fill empty seats.':'Ready! Start from here or from the first player’s phone.'}</p>
-      <div class="actions">${isHostTV()?`<button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>${crew().length<4?'<button id="addBot">🤖 Add computer</button>':''}`:'<span class="note">📺 Extra screen: this TV follows the game. Start it from the host TV or the first player’s phone.</span>'}<button class="ghost" id="leave">Exit</button></div>
+      <div class="actions">${isHostTV()?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="asyncO" style="width:auto;min-height:0" ${ui.asyncOnline?'checked':''}> <span>🕐 <b>Play over days:</b> take your turn whenever you like and close the app in between. Tidefall keeps your place.</span></label><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>${crew().length<4?'<button id="addBot">🤖 Add computer</button>':''}`:'<span class="note">📺 Extra screen: this TV follows the game. Start it from the host TV or the first player’s phone.</span>'}<button class="ghost" id="leave">Exit</button></div>
       ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
     </div>
   </div>`:`
@@ -1525,7 +1540,7 @@ function renderLobby(){
     <label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink);font-size:14px"><input type="checkbox" class="tutopt-cb" style="width:auto;min-height:0" ${ui.tutorial?'checked':''}> <span>Show a quick rules overview before the game</span></label>
     ${isHost&&crew().length<4?'<div class="actions"><button id="addBot">🤖 Add computer</button><span class="note" style="flex:2">Fill empty seats with computer players.</span></div>':''}
     <div class="actions">
-      ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
+      ${isHost?`<label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="blindO" style="width:auto;min-height:0" ${ui.blindOnline?'checked':''}> Hidden values: nobody sees their own explorer values until the end</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="houseO" style="width:auto;min-height:0" ${ui.houseOnline?'checked':''}> <span>House rule: whales and serpents also smash <b>empty</b> boats</span></label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="whirlO" style="width:auto;min-height:0" ${ui.whirlOnline?'checked':''}> House rule: whirlpools also sink the <b>land</b> next to them, with everyone on it</label><label style="display:flex;gap:8px;align-items:center;flex-basis:100%;color:var(--ink)"><input type="checkbox" id="asyncO" style="width:auto;min-height:0" ${ui.asyncOnline?'checked':''}> <span>🕐 <b>Play over days:</b> take your turn whenever you like and close the app in between. Tidefall keeps your place.</span></label><button class="primary" id="start" ${crew().length<2?'disabled':''}>Start game</button>`:`<p class="note">${seated?'Waiting for the host to start…':'Loading…'}</p>`}
       <button class="ghost" id="leave">Leave</button>
     </div>
     ${ui.err?`<div class="err">${esc(ui.err)}</div>`:''}
@@ -1541,6 +1556,7 @@ function renderLobby(){
   const bo=document.getElementById('blindO');if(bo)bo.onchange=()=>{ui.blindOnline=bo.checked;};
   const ho=document.getElementById('houseO');if(ho)ho.onchange=()=>{ui.houseOnline=ho.checked;};
   const wo=document.getElementById('whirlO');if(wo)wo.onchange=()=>{ui.whirlOnline=wo.checked;};
+  const ao=document.getElementById('asyncO');if(ao)ao.onchange=()=>{ui.asyncOnline=ao.checked;};
   const st=document.getElementById('start');if(st)st.onclick=()=>{st.disabled=true;startOnline();};
   document.getElementById('leave').onclick=goHome;
 }
@@ -1563,7 +1579,7 @@ function statusHTML(){
   }
   if(cur.ai&&!isTV())return `<div class="status wait">${nm} is playing… <span class="note">(${phaseName(s)})</span></div>`;
   if(isTV())return `<div class="status tvstatus">${nm} <span>${phaseName(s)?'is '+phaseName(s):'is up'}</span></div>`;
-  if(!canAct())return `<div class="status wait">Waiting for ${nm}… <span class="note">(${phaseName(s)})</span></div>`;
+  if(!canAct())return `<div class="status wait">Waiting for ${nm}… <span class="note">(${phaseName(s)})</span>${s.async&&net.online&&myIndex()>=0?'<br><span class="note">🕐 Over-days game: you can close Tidefall and come back when it’s your turn.</span>':''}</div>`;
   const P=s.pending;let t='';
   if(s.phase==='setupE')t=s.blind?`${nm}, tap any empty land tile to place an explorer.`:`${nm}, choose an explorer below, then tap any empty land tile.`;
   else if(s.phase==='setupB')t=`${nm}, tap a highlighted sea space next to the island to place a boat (${s.boatsLeft} left).`;
@@ -1670,6 +1686,7 @@ function renderGame(){
     <div class="rightcol">
       <div class="controls">
       ${statusHTML()}
+      ${awayHTML()}${nudgeHTML()}${myIndex()<0?seatHTML():''}
       ${promptHTML}
       ${tray}${picker}
       <div class="actions">${actions}${s.phase==='ended'?`<button class="primary" id="again">${net.online?'Back to menu':'New game'}</button>`:''}</div>
@@ -1681,7 +1698,7 @@ function renderGame(){
         const on=s.explorers.filter(e=>e.o===i&&e.st==='on').length,dead=s.explorers.filter(e=>e.o===i&&e.st==='dead').length;
         const showPts=s.phase==='ended'||(!s.blind&&(net.online?i===me:(hs.length===1&&i===hs[0])));
         return `<div class="pl ${i===s.turn&&s.phase!=='ended'?'cur':''}"><span class="sw" style="background:${p.color}"></span><span class="nm" data-pn="${i}"></span><span class="st">🏝️${sc[i].n}${showPts?' ('+sc[i].pts+'pt)':''} · 🧍${on} · ☠️${dead}${s.hands[i].length?' · 🂠'+s.hands[i].length:''}</span></div>`;}).join('')}</div>
-      ${handHTML}${rv}
+      ${handHTML}${rv}${myIndex()>=0?seatHTML():''}
       <div class="card"><h2>Captain's log</h2><div class="log" id="log">${s.log.slice().reverse().map(m=>`<div>${esc(m)}</div>`).join('')}</div></div>
       <div class="card">${RULES}</div>
       </div>
@@ -1722,8 +1739,72 @@ function renderGame(){
   document.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>{ui.sel=null;const fx=b.dataset.play;act(ns=>playTile(ns,fx));});
   checkFx();
   maybeTutorial();
+  wireAsync();
   scheduleAI();
 }
+/* ---------- play over days: saved rooms, seat codes, turn alerts, nudges, "while you were away" ---------- */
+function seatCode(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<4;i++)c+=A[Math.floor(Math.random()*A.length)];return c;}
+function myGames(){try{return JSON.parse(localStorage.getItem('tf_games')||'[]').filter(g=>g&&/^[A-Z]{5}$/.test(g.code));}catch{return[];}}
+function saveGame(code){if(!code)return;const L=myGames().filter(g=>g.code!==code);L.unshift({code,at:Date.now()});lsSet('tf_games',JSON.stringify(L.slice(0,12)));}
+function forgetGame(code){lsSet('tf_games',JSON.stringify(myGames().filter(g=>g.code!==code)));}
+function noteGame(code){if(myIndex()>=0&&!myGames().some(g=>g.code===code))saveGame(code);}
+// home screen list of rooms you're in, with whose turn it is
+function myGamesHTML(){const L=myGames();if(!L.length||!DB)return '';
+  return `<div class="card mygames"><h2>🕐 Your games</h2><div id="mgList">${L.map(g=>`<div class="mgrow" data-mg="${g.code}"><span class="mgcode">${g.code}</span><span class="mgst note">Checking…</span><button class="small primary" data-mgo="${g.code}">Open</button><button class="small ghost" data-mgx="${g.code}" title="Remove from this list">✕</button></div>`).join('')}</div></div>`;}
+function wireMyGames(){
+  document.querySelectorAll('[data-mgo]').forEach(b=>b.onclick=()=>{b.disabled=true;joinOnline(b.dataset.mgo,lsGet('tf_nick')||'');});
+  document.querySelectorAll('[data-mgx]').forEach(b=>b.onclick=()=>{forgetGame(b.dataset.mgx);render();});
+  for(const g of myGames()){const row=document.querySelector(`[data-mg="${g.code}"]`);if(!row)continue;
+    DB.doc('games/'+g.code).get().then(snap=>{const st=row.querySelector('.mgst');if(!st)return;
+      if(!snap.exists){st.textContent='This game no longer exists.';row.classList.add('dim');return;}
+      const d=snap.data();if(!d.state){st.textContent='In the lobby, waiting to start';return;}
+      let s;try{s=JSON.parse(d.state);}catch{st.textContent='';return;}
+      const me=s.players.findIndex(p=>p.id===MYID),cur=s.players[s.turn];const names=s.players.map(p=>p.name).join(', ');
+      if(s.phase==='ended'){const sc=scores(s);const best=Math.max(...sc.map(x=>x.pts));const w=s.players.filter((p,i)=>sc[i].pts===best).map(p=>p.name).join(' & ');st.innerHTML=`Finished · ${esc(w)} won<br><span>${esc(names)}</span>`;row.classList.add('dim');return;}
+      const mine=me===s.turn;st.innerHTML=`${mine?'<b class="yt">Your turn!</b>':`${esc(cur.name)}’s turn`}${s.async?' · 🕐':''}<br><span>${esc(names)}</span>`;if(mine)row.classList.add('mine');
+    }).catch(()=>{const st=row.querySelector('.mgst');if(st)st.textContent='Could not check this game.';});}
+}
+// take over your seat on another phone, or in the home-screen app
+async function claimSeat(codeIn){const c=String(codeIn||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(!S||!c){return;}
+  const i=S.players.findIndex(p=>!p.ai&&p.tok===c);
+  if(i<0){toast('That seat code doesn’t match a player in this game.');return;}
+  if(myIndex()>=0&&myIndex()!==i){toast('This device is already playing another seat.');return;}
+  const ns=clone(S);ns.players[i].id=MYID;ns.v=(S.v||0)+1;log(ns,`${ns.players[i].name} moved to another device.`);
+  saveGame(net.code);commit(ns);toast(`You’re playing as ${ns.players[i].name} on this device now.`);}
+// "your turn" alerts: page title, app icon badge, and a notification if the app is in the background
+const TURN={key:'',asked:false};
+function turnAlert(){
+  const mine=net.online&&S&&canAct();const base='Tidefall — Escape the Sinking Isle';
+  document.title=mine?'(Your turn) Tidefall':base;
+  try{if(navigator.setAppBadge){mine?navigator.setAppBadge(1):navigator.clearAppBadge();}}catch{}
+  if(!mine)return;const k=net.code+':'+S.turnNo+':'+S.turn+':'+S.phase;if(TURN.key===k)return;const first=!TURN.key;TURN.key=k;
+  if(first&&!document.hidden)return;
+  try{if(document.hidden&&window.Notification&&Notification.permission==='granted')new Notification('Your turn in Tidefall',{body:`Room ${net.code}: it’s your move.`,icon:'icon-192.png',tag:'tf-'+net.code});}catch{}
+}
+function askAlerts(){try{if(!window.Notification){toast('This browser can’t show alerts. The game still saves your place.');return;}
+  Notification.requestPermission().then(p=>{toast(p==='granted'?'You’ll get an alert when it’s your turn while Tidefall is open in the background.':'Alerts are off for this site.');render();});}catch{}}
+// tell the next player it's their move
+function nudgeHTML(){const s=S;if(!s||!s.async||!net.online||s.phase==='ended'||canAct()||isTV())return '';const cur=s.players[s.turn];if(cur.ai||s.lastBy!==MYID)return '';
+  return `<div class="nudge">📣 Let <b>${esc(cur.name)}</b> know it’s their turn <button class="small primary" id="nudge">Send a reminder</button><span class="note" style="flex-basis:100%">You can close Tidefall now. Your game is saved; open it from <b>Your games</b> any time.</span></div>`;}
+function nudge(){const s=S;const cur=s.players[s.turn];const msg=`${cur.name}, it’s your turn in Tidefall! Room ${net.code}.`;const url=HOSTED?joinURL():'';
+  if(navigator.share){navigator.share({title:'Tidefall',text:msg,url:url||undefined}).catch(()=>{});return;}
+  try{navigator.clipboard.writeText(msg+(url?' '+url:'')).then(()=>toast('Reminder copied. Paste it into a text to '+cur.name+'.'),()=>toast(msg));}catch{toast(msg);}}
+// what happened since you last looked
+function awayKey(){return 'tf_seen_'+net.code;}
+function awayHTML(){const s=S;if(!net.online||!s||!s.async||isTV()||myIndex()<0)return '';
+  const n=s.logN||s.log.length;
+  if(ui.away&&ui.away.code===net.code)return ui.away.lines.length?`<div class="away"><div class="row" style="justify-content:space-between"><b>🕐 While you were away</b><button class="small ghost" id="awayX">Got it</button></div>${ui.away.lines.map(l=>`<div>${esc(l)}</div>`).join('')}</div>`:'';
+  const seen=+lsGet(awayKey())||0;const newN=seen?Math.min(n-seen,s.log.length,14):0;
+  ui.away={code:net.code,lines:newN>0?s.log.slice(-newN):[]};lsSet(awayKey(),String(n));
+  return awayHTML();}
+function seatHTML(){const s=S;if(!net.online||!s)return '';const me=myIndex();
+  if(me>=0){const p=s.players[me];if(!p.tok)return '';
+    return `<div class="card"><h2>📲 Your seat</h2><p class="note" style="margin:0">To keep playing on another phone or from the home-screen app, open room <b>${esc(net.code)}</b> there and enter your seat code:</p><div class="code" style="font-size:26px;margin:6px 0">${esc(p.tok)}</div>${s.async&&window.Notification&&Notification.permission!=='granted'?'<button class="small ghost" id="alerts">🔔 Alert me when it’s my turn</button>':''}</div>`;}
+  if(isTV()||s.phase==='ended'||!s.players.some(p=>p.tok))return '';
+  return `<div class="claim"><b>Already a player in this game?</b> Enter the seat code from your other device: <span class="row"><input id="seatIn" maxlength="4" placeholder="ABCD" style="text-transform:uppercase;letter-spacing:3px;flex:1"><button class="small primary" id="seatGo">Take my seat</button></span></div>`;}
+function wireAsync(){const on=(id,f)=>{const e=document.getElementById(id);if(e)e.onclick=f;};
+  on('nudge',nudge);on('alerts',askAlerts);on('awayX',()=>{if(ui.away)ui.away.lines=[];render();});
+  on('seatGo',()=>claimSeat((document.getElementById('seatIn')||{}).value));turnAlert();}
 /* ---------- voice chat (hosted build only): WebRTC between the people in a room, signalled through the game database ---------- */
 const VOICE=(()=>{
   const OK=()=>HOSTED&&!!window.RTCPeerConnection&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!!DB;
